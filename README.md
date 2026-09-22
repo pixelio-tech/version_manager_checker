@@ -64,7 +64,7 @@ await VersionManager.instance.presentAll(
         break;
     }
   },
-  onLocalPush: (payload) => scheduleLocalNotification(payload),
+  onLocalPush: (p) => showLocalPush(p), // см. «Локальные пуши» ниже
   onSilent: (payload) => handleSilently(payload),
 );
 ```
@@ -72,6 +72,51 @@ await VersionManager.instance.presentAll(
 `presentAll` показывает всё, что пришло, и сам шлёт события воронки
 (`shown` / `clicked` / `dismissed`) — в админке это графики CTR. Нужен
 контроль над конкретным уведомлением — зовите `presentVmNotification`.
+
+### Локальные пуши (`localPush`)
+
+Системное уведомление пакет не рисует сам и **не тянет**
+`flutter_local_notifications` в зависимости: у плагина есть нативная часть
+(манифест, разрешения, entitlements), и приложения, которые `localPush` не
+используют, платили бы за неё впустую. Уведомление такого типа приходит в
+`onLocalPush` — ставьте плагин у себя и показывайте:
+
+```dart
+// pubspec.yaml приложения: flutter_local_notifications: ^18.0.1
+final push = FlutterLocalNotificationsPlugin();
+await push.initialize(
+  const InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(),
+  ),
+);
+await push
+    .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+    ?.requestNotificationsPermission();
+
+// ...
+await VersionManager.instance.presentAll(
+  context,
+  onAction: ...,
+  onLocalPush: (p) => push.show(
+    p.id.hashCode,
+    p.title,
+    p.body,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'vm_notifications',
+        'Notifications',
+        importance: Importance.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+    ),
+    payload: p.id,
+  ),
+);
+```
+
+`style.icon` и `style.buttons` при желании раскладываются на иконку и
+actions плагина — payload отдаётся целиком.
 
 ### Периодическая проверка
 
@@ -119,9 +164,8 @@ class PrefsStorage implements VmStorage {
 сторонам, скругление по углам, тень, отступ от краёв экрана, максимальная
 ширина, крестик, ручка шторки, длительность и кривая появления.
 
-`localPush` не рисуется: настоящее системное уведомление требует плагина
-вроде `flutter_local_notifications`. Подпишитесь на `onLocalPush` и
-запланируйте его сами. `silent` не рисуется по определению — приходит в
+`localPush` — не карточка в дереве блоков, а системное уведомление; см.
+«Локальные пуши» выше. `silent` не рисуется по определению — приходит в
 `onSilent`.
 
 Частоту показов (`maxImpressions`, `minIntervalHours`) считает сервер, на

@@ -171,7 +171,9 @@ class _BannerNotificationState extends State<BannerNotification> with SingleTick
                         NotificationButtonsRow(style: _style, locale: widget.locale, compact: true, onTap: widget.onButtonTap),
                       ],
                     ),
-                  if (_style.closeButton) NotificationCloseButton(style: _style, onTap: _dismiss),
+                  // Крестик рисуется всегда: баннер и так уходит сам, но
+                  // закрыть его руками пользователь должен мочь в любой момент.
+                  NotificationCloseButton.positioned(_style, _dismiss, inset: 6),
                 ],
               ),
             ),

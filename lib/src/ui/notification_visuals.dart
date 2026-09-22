@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -54,16 +55,34 @@ TextAlign notificationTextAlign(NotificationStyle style) =>
 CrossAxisAlignment notificationCrossAlign(NotificationStyle style) =>
     style.typography.align == 'center' ? CrossAxisAlignment.center : CrossAxisAlignment.start;
 
+/// Картинка уведомления по её адресу. Конструктор умеет отдавать не только
+/// ссылку, но и `data:` — встроенный base64 (так в админку попадают
+/// загруженные файлы). `Image.network` такие адреса не понимает и молча
+/// показывает пустоту, поэтому разбираем их сами.
+Widget notificationNetworkImage(String url, {double? width, double? height, BoxFit fit = BoxFit.cover}) {
+  if (url.startsWith('data:')) {
+    final comma = url.indexOf(',');
+    final meta = comma == -1 ? '' : url.substring(0, comma);
+    if (comma == -1 || !meta.contains(';base64')) return const SizedBox.shrink();
+    try {
+      final bytes = base64Decode(url.substring(comma + 1));
+      return Image.memory(bytes, width: width, height: height, fit: fit, errorBuilder: (_, _, _) => const SizedBox.shrink());
+    } on FormatException {
+      return const SizedBox.shrink();
+    }
+  }
+  return Image.network(url, width: width, height: height, fit: fit, errorBuilder: (_, _, _) => const SizedBox.shrink());
+}
+
 /// The configured picture, sized and fitted per `style.image`.
 Widget? notificationImage(NotificationStyle style, {double? radius}) {
   final image = style.image;
   if (image == null) return null;
-  final child = Image.network(
+  final child = notificationNetworkImage(
     image.url,
     height: image.height,
     width: double.infinity,
     fit: image.fit == 'contain' ? BoxFit.contain : BoxFit.cover,
-    errorBuilder: (_, _, _) => const SizedBox.shrink(),
   );
   return radius == null || radius == 0 ? child : ClipRRect(borderRadius: BorderRadius.circular(radius), child: child);
 }
@@ -75,20 +94,27 @@ class NotificationCloseButton extends StatelessWidget {
 
   const NotificationCloseButton({super.key, required this.style, required this.onTap});
 
+  /// Крестик, приклеенный к верхнему углу карточки. Именно [Positioned]:
+  /// обычный [Align] внутри [Stack] растягивается на все доступные размеры и
+  /// раздувает карточку до высоты экрана.
+  static Widget positioned(NotificationStyle style, VoidCallback onTap, {double inset = 8}) => Positioned(
+    top: inset,
+    left: style.closeButtonPosition == 'left' ? inset : null,
+    right: style.closeButtonPosition == 'left' ? null : inset,
+    child: NotificationCloseButton(style: style, onTap: onTap),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(Icons.close, size: 16, color: style.colors.text.withValues(alpha: 0.55));
-    return Align(
-      alignment: style.closeButtonPosition == 'left' ? Alignment.topLeft : Alignment.topRight,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: style.closeButtonStyle == 'circle'
-              ? BoxDecoration(color: style.colors.text.withValues(alpha: 0.12), shape: BoxShape.circle)
-              : null,
-          child: icon,
-        ),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: style.closeButtonStyle == 'circle'
+            ? BoxDecoration(color: style.colors.text.withValues(alpha: 0.12), shape: BoxShape.circle)
+            : null,
+        child: Icon(Icons.close, size: 16, color: style.colors.text.withValues(alpha: 0.55)),
       ),
     );
   }
@@ -283,13 +309,7 @@ class NotificationIconBadge extends StatelessWidget {
     if (source == 'custom' && url != null) {
       return ClipRRect(
         borderRadius: radius,
-        child: Image.network(
-          url,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
+        child: notificationNetworkImage(url, width: size, height: size),
       );
     }
     return Container(

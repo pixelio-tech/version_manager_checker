@@ -254,7 +254,9 @@ enum ButtonsLayout {
   stack;
 
   factory ButtonsLayout.fromJson(String? v) =>
-      ButtonsLayout.values.firstWhere((e) => e.name == v, orElse: () => ButtonsLayout.row);
+      // `column` — синоним `stack`: так эту раскладку называет дерево блоков
+      // конструктора, и кнопки не должны молча вставать в строку.
+      v == 'column' ? ButtonsLayout.stack : ButtonsLayout.values.firstWhere((e) => e.name == v, orElse: () => ButtonsLayout.row);
 }
 
 enum NotificationButtonStyle {

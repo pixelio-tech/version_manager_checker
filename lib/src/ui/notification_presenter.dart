@@ -20,10 +20,12 @@ typedef VmNotificationEvent = void Function(String notificationId, String eventT
 /// `type`, using its `style` verbatim — this is the client-side half of the
 /// admin configurator's live preview; the two must stay visually identical.
 ///
-/// `localPush` is intentionally not drawn here: a real local/OS push needs a
-/// plugin like `flutter_local_notifications`, which this package does not
-/// depend on. Wire [onLocalPush] to schedule it yourself; `style.icon` and
-/// `style.buttons` map onto that plugin's icon/actions.
+/// A `localPush` payload is not drawn here: an OS notification needs a plugin
+/// like `flutter_local_notifications`, whose native side (manifest entries,
+/// permissions, entitlements) only the host app can own. Depending on it here
+/// would push that native weight onto every consumer, including the ones that
+/// never send `localPush`. Wire [onLocalPush] and schedule it yourself — the
+/// README has a ready snippet.
 void presentVmNotification(
   BuildContext context, {
   required NotificationPayload payload,

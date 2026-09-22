@@ -12,7 +12,13 @@ class NotificationBlocks extends StatelessWidget {
   final String locale;
   final void Function(NotificationButtonConfig button) onButtonTap;
 
-  const NotificationBlocks({super.key, required this.style, required this.locale, required this.onButtonTap});
+  /// Карточка занимает всю доступную высоту (полноэкранное уведомление).
+  /// Только тогда растяжимый отступ может растягиваться: в обычной карточке
+  /// высота считается по содержимому, и `Expanded` растянул бы её на весь
+  /// экран — уведомление выглядело бы «раздутым».
+  final bool fill;
+
+  const NotificationBlocks({super.key, required this.style, required this.locale, required this.onButtonTap, this.fill = false});
 
   @override
   Widget build(BuildContext context) {
@@ -25,19 +31,26 @@ class NotificationBlocks extends StatelessWidget {
       if (i > 0) children.add(SizedBox(height: style.gap));
       final block = style.blocks[i];
       final bleed = block.box?.bleed ?? false;
-      children.add(
-        Padding(
-          padding: EdgeInsets.only(
-            top: i == 0 ? (bleed ? 0 : pad.top) : 0,
-            bottom: i == last ? (bleed ? 0 : pad.bottom) : 0,
-            left: bleed ? 0 : pad.left,
-            right: bleed ? 0 : pad.right,
-          ),
-          child: _render(block, isRow: false),
+      final padded = Padding(
+        padding: EdgeInsets.only(
+          top: i == 0 ? (bleed ? 0 : pad.top) : 0,
+          bottom: i == last ? (bleed ? 0 : pad.bottom) : 0,
+          left: bleed ? 0 : pad.left,
+          right: bleed ? 0 : pad.right,
         ),
+        child: _render(block, isRow: false),
       );
+      // Растяжимый отступ обязан быть ПРЯМЫМ ребёнком Column: Expanded внутри
+      // Padding — ошибка раскладки (ParentDataWidget), из-за которой
+      // полноэкранное уведомление падало вместо отрисовки.
+      final grows = fill && block is SpacerBlock && block.grow;
+      children.add(grows ? Expanded(child: padded) : padded);
     }
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+    return Column(
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 
   List<Widget> _withGaps(List<NotificationBlock> blocks, double gap, {required bool isRow}) {
@@ -97,9 +110,14 @@ class NotificationBlocks extends StatelessWidget {
 
     child = _boxed(block, child);
 
-    // Растяжимый отступ занимает всё свободное место вдоль оси.
+    // Растяжимый отступ занимает свободное место вдоль оси. В колонке это
+    // возможно, только когда карточка тянется на всю высоту ([fill]); иначе
+    // отступ остаётся фиксированным, а карточка — по содержимому.
     if (block is SpacerBlock && block.grow) {
-      return isRow ? const Spacer() : const Expanded(child: SizedBox.shrink());
+      if (isRow) return const Spacer();
+      // В колонке растяжение включает сам [build] (Expanded снаружи полей);
+      // здесь остаётся обычный отступ.
+      return SizedBox(height: block.size);
     }
     // flex работает только внутри ряда: иначе Expanded ломает высоту колонки.
     if (isRow && block.flex != null) return Expanded(flex: block.flex!.round().clamp(1, 12), child: child);
@@ -120,12 +138,11 @@ class NotificationBlocks extends StatelessWidget {
 
   Widget _image(ImageBlock b) {
     if (b.url.isEmpty) return const SizedBox.shrink();
-    Widget picture = Image.network(
+    Widget picture = notificationNetworkImage(
       b.url,
       height: b.aspect != null ? null : b.height,
       width: double.infinity,
       fit: b.fit == 'contain' ? BoxFit.contain : BoxFit.cover,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
     // Заданная ширина работает как максимум: шире карточки картинка не станет.
     if (b.width != null) {
