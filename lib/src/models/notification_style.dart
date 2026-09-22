@@ -416,7 +416,3 @@ Color? _colorOr(dynamic hex, Color? fallback) {
   final v = int.tryParse(h, radix: 16);
   return v != null ? Color(v) : fallback;
 }
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
