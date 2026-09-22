@@ -5,9 +5,9 @@ description: >
   обязательного обновления и рисует присланные уведомления ровно так, как их
   собрали в админке.
 version: 0.3.0
-homepage: https://github.com/maksim-dev1/version_manager_checker
-repository: https://github.com/maksim-dev1/version_manager_checker
-issue_tracker: https://github.com/maksim-dev1/version_manager_checker/issues
+homepage: https://github.com/pixelio-tech/version_manager_checker
+repository: https://github.com/pixelio-tech/version_manager_checker
+issue_tracker: https://github.com/pixelio-tech/version_manager_checker/issues
 
 environment:
   sdk: ^3.12.0
