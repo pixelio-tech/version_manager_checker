@@ -16,4 +16,5 @@ export 'src/storage.dart';
 export 'src/ui/block_renderer.dart' show NotificationBlocks;
 export 'src/ui/notification_presenter.dart';
 export 'src/ui/update_gate.dart';
+export 'src/log.dart' show VmLogEvent, VmLogLevel, VmLogSink;
 export 'src/version_manager.dart';

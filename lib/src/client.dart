@@ -4,6 +4,7 @@ import 'dart:io' show SocketException;
 
 import 'package:http/http.dart' as http;
 
+import 'log.dart';
 import 'models/check_result.dart';
 
 /// Ответ `check-version` вместе с ETag: его возвращают в следующем запросе,
@@ -32,6 +33,7 @@ class VmV3Client {
   final Duration timeout;
   final int maxRetries;
   final http.Client _http;
+  final VmLog _log;
 
   VmV3Client({
     required this.baseUrl,
@@ -39,7 +41,9 @@ class VmV3Client {
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 10),
     this.maxRetries = 2,
-  }) : _http = httpClient ?? http.Client();
+    VmLogSink? onLog,
+  })  : _http = httpClient ?? http.Client(),
+        _log = VmLog(onLog);
 
   Uri _uri(String path) => Uri.parse('$baseUrl/api/mobile/v1$path');
 
@@ -85,18 +89,29 @@ class VmV3Client {
   }
 
   /// Отправляет событие воронки: `shown` | `clicked` | `dismissed`.
-  /// Ошибки глотает: статистика не должна ломать пользовательский сценарий.
+  ///
+  /// Ошибки не пробрасывает: статистика не должна ломать пользовательский
+  /// сценарий. Но и не теряет их молча — раньше статус ответа здесь вообще не
+  /// проверялся, и отказ сервера считался успехом.
   Future<void> recordEvent({required String notificationId, required String instanceId, required String eventType}) async {
     try {
-      await _send(
+      final res = await _send(
         () => _http.post(
           _uri('/notification-event'),
           headers: _headers,
           body: jsonEncode({'notificationId': notificationId, 'instanceId': instanceId, 'eventType': eventType}),
         ),
       );
-    } on VmApiException {
-      // Событие не дошло — переживём, воронка не критична для работы приложения.
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        _log.warning('notification event was not delivered',
+            error: VmApiException(res.statusCode, res.body), data: {'eventType': eventType});
+      }
+    } on VmNetworkException catch (e) {
+      // Сеть не дала отправить. Если события перестанут доходить у всех
+      // сразу, это проявится только пустой статистикой в админке.
+      _log.warning('notification event was not delivered', error: e, data: {'eventType': eventType});
+    } on VmApiException catch (e) {
+      _log.warning('notification event was not delivered', error: e, data: {'eventType': eventType});
     }
   }
 
@@ -105,13 +120,31 @@ class VmV3Client {
     Object? lastError;
     for (var attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
-        await Future<void>.delayed(Duration(milliseconds: 300 * (1 << (attempt - 1))));
+        final delay = Duration(milliseconds: 300 * (1 << (attempt - 1)));
+        // Причина повтора и задержка: снаружи иначе виден только итог, и
+        // «работает медленно» не отличить от «не работает».
+        _log.debug('retrying check', data: {
+          'attempt': attempt + 1,
+          'of': maxRetries + 1,
+          'afterMs': delay.inMilliseconds,
+          'reason': _reasonOf(lastError),
+        });
+        await Future<void>.delayed(delay);
       }
       try {
         final res = await run().timeout(timeout);
         if (res.statusCode >= 500 && attempt < maxRetries) {
           lastError = VmApiException(res.statusCode, res.body);
           continue;
+        }
+        if (res.statusCode >= 500) {
+          // Попытки кончились, а сервер всё ещё отвечает ошибкой. Ответ
+          // возвращаем как есть — его разбирает вызывающий, — но это отказ,
+          // и в логе он должен быть отказом.
+          _log.error('server still failing after all attempts',
+              data: {'attempts': attempt + 1, 'status': res.statusCode});
+        } else if (attempt > 0) {
+          _log.info('request succeeded after retries', data: {'attempts': attempt + 1});
         }
         return res;
       } on TimeoutException catch (e) {
@@ -122,8 +155,19 @@ class VmV3Client {
         lastError = e;
       }
     }
+    _log.error('request failed after all attempts',
+        error: lastError, data: {'attempts': maxRetries + 1, 'reason': _reasonOf(lastError)});
     if (lastError is VmApiException) throw lastError;
     throw VmNetworkException(lastError.toString());
+  }
+
+  /// Короткое имя причины: по нему видно, сеть это, таймаут или сервер.
+  static String _reasonOf(Object? error) {
+    if (error is TimeoutException) return 'timeout';
+    if (error is SocketException) return 'network';
+    if (error is http.ClientException) return 'client';
+    if (error is VmApiException) return 'http ${error.statusCode}';
+    return 'unknown';
   }
 
   void close() => _http.close();

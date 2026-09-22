@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import 'client.dart';
+import 'log.dart';
 import 'models/check_result.dart';
 import 'storage.dart';
 import 'ui/notification_presenter.dart';
@@ -49,6 +50,7 @@ class VersionManager {
   final String deviceModel;
   final String locale;
   final VmStorage storage;
+  final VmLog _log;
 
   String? _instanceId;
   String? _etag;
@@ -67,7 +69,8 @@ class VersionManager {
     required this.deviceModel,
     required this.locale,
     required this.storage,
-  });
+    required VmLogSink? onLog,
+  }) : _log = VmLog(onLog);
 
   /// Создаёт менеджер и восстанавливает `instanceId` из хранилища.
   static Future<VersionManager> init({
@@ -84,10 +87,12 @@ class VersionManager {
     VmV3Client? client,
     Duration timeout = const Duration(seconds: 10),
     int maxRetries = 2,
+    VmLogSink? onLog,
   }) async {
     final store = storage ?? VmMemoryStorage();
     final it = VersionManager._(
-      client: client ?? VmV3Client(baseUrl: baseUrl, apiKey: apiKey, timeout: timeout, maxRetries: maxRetries),
+      client: client ??
+          VmV3Client(baseUrl: baseUrl, apiKey: apiKey, timeout: timeout, maxRetries: maxRetries, onLog: onLog),
       namespace: namespace,
       version: version,
       buildNumber: buildNumber,
@@ -96,10 +101,26 @@ class VersionManager {
       deviceModel: deviceModel,
       locale: locale,
       storage: store,
+      onLog: onLog,
     );
-    it._instanceId = await store.read(_kInstanceId) ?? await it._newInstanceId();
-    it._etag = await store.read(_kEtag);
+    // Сбой хранилища не должен мешать проверке версии: она важнее, чем
+    // память между запусками. Но заметить его надо — без хранилища
+    // instanceId новый на каждый старт, и частотные ограничения показов
+    // считаются заново, то есть человек видит одно и то же уведомление.
+    try {
+      it._instanceId = await store.read(_kInstanceId) ?? await it._newInstanceId();
+      it._etag = await store.read(_kEtag);
+    } catch (e, st) {
+      it._log.error('storage is unavailable, continuing without it', error: e, stackTrace: st);
+      it._instanceId ??= await it._newInstanceId();
+    }
     _instance = it;
+    it._log.info('initialized', data: {
+      'version': version,
+      'buildNumber': buildNumber,
+      'platform': platform,
+      'hasStoredEtag': it._etag != null,
+    });
     return it;
   }
 
@@ -139,11 +160,25 @@ class VersionManager {
     );
     if (res.etag != null && res.etag != _etag) {
       _etag = res.etag;
-      await storage.write(_kEtag, res.etag!);
+      try {
+        await storage.write(_kEtag, res.etag!);
+      } catch (e, st) {
+        // Без сохранённого ETag каждый запуск снова тянет конфиг целиком:
+        // работать будет, но лишний трафик на каждом старте.
+        _log.error('failed to store the ETag', error: e, stackTrace: st);
+      }
     }
-    if (res.result == null) return _last;
+    if (res.result == null) {
+      _log.debug('config unchanged (304)');
+      return _last;
+    }
     _last = res.result;
     _results.add(res.result!);
+    _log.info('check completed', data: {
+      'status': res.result!.status,
+      'notifications': res.result!.notifications.length,
+      'nextCheckInSec': res.result!.nextCheckInterval,
+    });
     return res.result;
   }
 
@@ -152,17 +187,24 @@ class VersionManager {
   void startPolling({void Function(Object error)? onError, Duration? minInterval}) {
     stopPolling();
     void schedule(Duration d) {
+      _log.debug('next check scheduled', data: {'inSec': d.inSeconds});
       _poll = Timer(d, () async {
         try {
           final r = await check();
           schedule(_interval(r, minInterval));
-        } catch (e) {
+        } catch (e, st) {
           onError?.call(e);
-          schedule(minInterval ?? const Duration(minutes: 15));
+          final fallback = minInterval ?? const Duration(minutes: 15);
+          // Без этой записи поллинг после отказа молча уезжает на интервал по
+          // умолчанию, и «проверки стали редкими» выглядит как настройка.
+          _log.error('scheduled check failed, backing off',
+              error: e, stackTrace: st, data: {'nextInSec': fallback.inSeconds});
+          schedule(fallback);
         }
       });
     }
 
+    _log.info('polling started');
     schedule(_interval(_last, minInterval));
   }
 
@@ -173,6 +215,7 @@ class VersionManager {
   }
 
   void stopPolling() {
+    if (_poll != null) _log.debug('polling stopped');
     _poll?.cancel();
     _poll = null;
   }
