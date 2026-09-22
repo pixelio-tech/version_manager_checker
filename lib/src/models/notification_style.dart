@@ -374,7 +374,7 @@ class NotificationButtonConfig {
     );
   }
 
-  String labelFor(String locale) => label[locale] ?? label['ru'] ?? label['en'] ?? label.values.firstOrNull ?? '';
+  String labelFor(String locale) => vmPickLocalized(label, locale);
 }
 
 EdgeInsets? _insets(dynamic raw) {

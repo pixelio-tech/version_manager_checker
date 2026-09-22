@@ -261,7 +261,7 @@ class TextBlock extends NotificationBlock {
     this.underline = false,
   });
 
-  String textFor(String locale) => text[locale] ?? text['ru'] ?? text['en'] ?? '';
+  String textFor(String locale) => vmPickLocalized(text, locale);
 }
 
 class ImageBlock extends NotificationBlock {
@@ -395,4 +395,21 @@ Color? _colorOrNull(dynamic hex) {
   if (h.length == 6) h = 'FF$h';
   final v = int.tryParse(h, radix: 16);
   return v != null ? Color(v) : null;
+}
+
+/// Выбирает перевод под [locale], пропуская пустые значения.
+///
+/// Конструктор в админке заводит ключ на каждую известную локаль, даже если
+/// текст в неё не вписали, — поэтому проверять на `null` мало: приходит пустая
+/// строка, и без этой отбраковки уведомление рисуется с пустым местом вместо
+/// текста. Любой непустой перевод лучше пустоты.
+String vmPickLocalized(Map<String, String> values, String locale) {
+  for (final key in [locale, 'ru', 'en']) {
+    final v = values[key];
+    if (v != null && v.trim().isNotEmpty) return v;
+  }
+  for (final v in values.values) {
+    if (v.trim().isNotEmpty) return v;
+  }
+  return '';
 }
