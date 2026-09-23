@@ -6,16 +6,8 @@ import 'package:http/testing.dart';
 import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
 
 /// Ответ `check-version`, какой отдаёт сервер.
-String _okBody() => jsonEncode({
-      'success': true,
-      'data': {
-        'status': 'up_to_date',
-        'nextCheckInterval': 3600,
-        'notifications': <Object>[],
-      },
-      'error': null,
-      'meta': {'requestId': 'req-1'},
-    });
+String _okBody() =>
+    jsonEncode({'status': 'up_to_date', 'nextCheckInterval': 3600, 'notifications': <Object>[]});
 
 void main() {
   group('диагностика', () {
@@ -27,8 +19,11 @@ void main() {
         httpClient: MockClient((_) async => http.Response(_okBody(), 200)),
       );
       await client.checkVersion(
-        namespace: 'com.example', version: '1.0.0', buildNumber: 1,
-        platform: 'ios', instanceId: 'i-1',
+        namespace: 'com.example',
+        version: '1.0.0',
+        buildNumber: 1,
+        platform: 'ios',
+        instanceId: 'i-1',
       );
       // Ничего не упало и никуда не напечаталось — проверять больше нечего.
     });
@@ -49,8 +44,11 @@ void main() {
       );
 
       await client.checkVersion(
-        namespace: 'com.example', version: '1.0.0', buildNumber: 1,
-        platform: 'ios', instanceId: 'i-1',
+        namespace: 'com.example',
+        version: '1.0.0',
+        buildNumber: 1,
+        platform: 'ios',
+        instanceId: 'i-1',
       );
 
       final retry = events.firstWhere((e) => e.message.contains('retrying'));
@@ -72,8 +70,11 @@ void main() {
 
       await expectLater(
         client.checkVersion(
-          namespace: 'com.example', version: '1.0.0', buildNumber: 1,
-          platform: 'ios', instanceId: 'i-1',
+          namespace: 'com.example',
+          version: '1.0.0',
+          buildNumber: 1,
+          platform: 'ios',
+          instanceId: 'i-1',
         ),
         throwsA(isA<VmApiException>()),
       );
@@ -94,8 +95,11 @@ void main() {
       );
 
       final res = await client.checkVersion(
-        namespace: 'com.example', version: '1.0.0', buildNumber: 1,
-        platform: 'ios', instanceId: 'i-1',
+        namespace: 'com.example',
+        version: '1.0.0',
+        buildNumber: 1,
+        platform: 'ios',
+        instanceId: 'i-1',
       );
       expect(res.result, isNotNull);
     });
@@ -113,8 +117,11 @@ void main() {
 
       await expectLater(
         client.checkVersion(
-          namespace: 'com.example', version: '1.0.0', buildNumber: 1,
-          platform: 'ios', instanceId: 'i-1',
+          namespace: 'com.example',
+          version: '1.0.0',
+          buildNumber: 1,
+          platform: 'ios',
+          instanceId: 'i-1',
         ),
         throwsA(isA<VmApiException>()),
       );
@@ -133,8 +140,11 @@ void main() {
         baseUrl: 'https://example.test',
         apiKey: 'vm_live_x',
         maxRetries: 0,
-        httpClient: MockClient((r) async =>
-            r.url.path.endsWith('/notification-event') ? http.Response('nope', 400) : http.Response(_okBody(), 200)),
+        httpClient: MockClient(
+          (r) async => r.url.path.endsWith('/notification-event')
+              ? http.Response('nope', 400)
+              : http.Response(_okBody(), 200),
+        ),
         onLog: events.add,
       );
 

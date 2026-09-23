@@ -72,13 +72,10 @@ class _DemoHomeState extends State<DemoHome> {
         deviceModel: 'sandbox',
       );
       _say('подключились, instanceId ${vm.instanceId.substring(0, 8)}…');
-      final res = await vm.check();
+      final outcome = await vm.check();
+      final res = outcome.result;
       setState(() => _result = res);
-      _say(
-        res == null
-            ? 'ответ пустой'
-            : 'статус ${res.status}, приоритет ${res.updatePriority}, уведомлений ${res.notifications.length}',
-      );
+      _say(_describe(outcome));
       if (res != null && mounted) {
         await vm.presentAll(
           context,
@@ -97,15 +94,23 @@ class _DemoHomeState extends State<DemoHome> {
   Future<void> _recheck() async {
     if (!VersionManager.isInitialized) return _say('сначала подключитесь');
     setState(() => _busy = true);
-    try {
-      final res = await VersionManager.instance.check();
-      setState(() => _result = res);
-      _say('перепроверили: статус ${res?.status ?? '—'} (304 отдаёт прежний результат)');
-    } catch (e) {
-      _say('ошибка: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    // check() не бросает: try здесь не нужен.
+    final outcome = await VersionManager.instance.check();
+    setState(() => _result = outcome.result);
+    _say('перепроверили: ${_describe(outcome)}');
+    if (mounted) setState(() => _busy = false);
+  }
+
+  /// Человеческое описание исхода — в стенде видно, откуда взялся конфиг.
+  String _describe(VmCheckOutcome outcome) {
+    final r = outcome.result;
+    return switch (outcome) {
+      VmFresh() => 'свежий конфиг: статус ${r!.status}, уведомлений ${r.notifications.length}',
+      VmUnchanged() => 'не менялся (304): статус ${r?.status ?? '—'}',
+      VmUnavailable(:final cause, :final cacheAge) => r == null
+          ? 'сервер недоступен, конфига нет — работаем как обычно ($cause)'
+          : 'сервер недоступен, берём сохранённый конфиг возрастом ${cacheAge?.inMinutes} мин ($cause)',
+    };
   }
 
   void _show(String name) {

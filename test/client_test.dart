@@ -5,20 +5,21 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
 
-Map<String, dynamic> _okBody({String status = 'active', List<Map<String, dynamic>> notifications = const []}) => {
-  'success': true,
-  'data': {
-    'status': status,
-    'isBlocked': false,
-    'blockReason': null,
-    'updatePriority': 'none',
-    'recommendedVersion': null,
-    'notifications': notifications,
-    'nextCheckInterval': 1800,
-    'configHash': 'hash-1',
-    'message': '',
-    'serverTimestamp': '2026-09-20T10:00:00Z',
-  },
+/// Форма ответа v2: полезная нагрузка на верхнем уровне, без конверта.
+Map<String, dynamic> _okBody({
+  String status = 'active',
+  List<Map<String, dynamic>> notifications = const [],
+}) => {
+  'status': status,
+  'isBlocked': false,
+  'blockReason': null,
+  'updatePriority': 'none',
+  'recommendedVersion': null,
+  'notifications': notifications,
+  'nextCheckInterval': 1800,
+  'configHash': 'hash-1',
+  'message': '',
+  'serverTimestamp': '2026-09-20T10:00:00Z',
 };
 
 VmV3Client _client(MockClient mock, {int maxRetries = 2}) =>
@@ -39,14 +40,18 @@ void main() {
     final c = _client(
       MockClient((req) async {
         seen = req;
-        return http.Response(jsonEncode(_okBody()), 200, headers: {'etag': 'hash-1', 'content-type': 'application/json'});
+        return http.Response(
+          jsonEncode(_okBody()),
+          200,
+          headers: {'etag': 'hash-1', 'content-type': 'application/json'},
+        );
       }),
     );
 
     final res = await _check(c);
 
     expect(seen.headers['X-API-Key'], 'vm_live_x');
-    expect(seen.url.path, '/api/mobile/v1/check-version');
+    expect(seen.url.path, '/api/mobile/v2/check-version');
     final body = jsonDecode(seen.body) as Map<String, dynamic>;
     expect(body['namespace'], 'com.example.app');
     expect(body['buildNumber'], 1);

@@ -16,14 +16,23 @@ class CheckResponse {
   /// Значение заголовка `ETag` (оно же `configHash`).
   final String? etag;
 
-  const CheckResponse({this.result, this.etag});
+  /// Тело ответа как есть. Его кладут в хранилище, чтобы пережить перезапуск:
+  /// разбирать обратно дешевле, чем описывать сериализацию всего дерева
+  /// моделей и потом следить, чтобы она не разошлась с разбором.
+  final String? raw;
+
+  const CheckResponse({this.result, this.etag, this.raw});
 
   bool get notModified => result == null;
 }
 
 /// Тонкий клиент мобильного API Version Manager v3
-/// (`/api/mobile/v1/*`, авторизация по ключу приложения — см.
+/// (`/api/mobile/v2/*`, авторизация по ключу приложения — см.
 /// `version_manager_v3_back/internal/check/handler.go`).
+///
+/// Форма ответов — `version_manager_v3_back/api/RESPONSES.md`: полезная
+/// нагрузка на верхнем уровне, ошибки в `application/problem+json`, отказ по
+/// ключу — 403. Версия v1 заморожена и здесь не используется.
 ///
 /// Сетевые сбои и 5xx повторяются с нарастающей паузой: мобильная сеть рвётся
 /// часто, а проверка версии не должна ронять запуск приложения.
@@ -42,10 +51,10 @@ class VmV3Client {
     this.timeout = const Duration(seconds: 10),
     this.maxRetries = 2,
     VmLogSink? onLog,
-  })  : _http = httpClient ?? http.Client(),
-        _log = VmLog(onLog);
+  }) : _http = httpClient ?? http.Client(),
+       _log = VmLog(onLog);
 
-  Uri _uri(String path) => Uri.parse('$baseUrl/api/mobile/v1$path');
+  Uri _uri(String path) => Uri.parse('$baseUrl/api/mobile/v2$path');
 
   Map<String, String> get _headers => {'Content-Type': 'application/json', 'X-API-Key': apiKey};
 
@@ -81,11 +90,10 @@ class VmV3Client {
 
     if (res.statusCode == 304) return CheckResponse(etag: res.headers['etag'] ?? etag);
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw VmApiException(res.statusCode, res.body);
+      throw VmApiException.fromResponse(res.statusCode, res.body);
     }
-    final envelope = jsonDecode(res.body) as Map<String, dynamic>;
-    final result = CheckResult.fromJson(envelope['data'] as Map<String, dynamic>);
-    return CheckResponse(result: result, etag: res.headers['etag'] ?? result.configHash);
+    final result = CheckResult.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+    return CheckResponse(result: result, etag: res.headers['etag'] ?? result.configHash, raw: res.body);
   }
 
   /// Отправляет событие воронки: `shown` | `clicked` | `dismissed`.
@@ -93,18 +101,29 @@ class VmV3Client {
   /// Ошибки не пробрасывает: статистика не должна ломать пользовательский
   /// сценарий. Но и не теряет их молча — раньше статус ответа здесь вообще не
   /// проверялся, и отказ сервера считался успехом.
-  Future<void> recordEvent({required String notificationId, required String instanceId, required String eventType}) async {
+  Future<void> recordEvent({
+    required String notificationId,
+    required String instanceId,
+    required String eventType,
+  }) async {
     try {
       final res = await _send(
         () => _http.post(
           _uri('/notification-event'),
           headers: _headers,
-          body: jsonEncode({'notificationId': notificationId, 'instanceId': instanceId, 'eventType': eventType}),
+          body: jsonEncode({
+            'notificationId': notificationId,
+            'instanceId': instanceId,
+            'eventType': eventType,
+          }),
         ),
       );
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        _log.warning('notification event was not delivered',
-            error: VmApiException(res.statusCode, res.body), data: {'eventType': eventType});
+        _log.warning(
+          'notification event was not delivered',
+          error: VmApiException.fromResponse(res.statusCode, res.body),
+          data: {'eventType': eventType},
+        );
       }
     } on VmNetworkException catch (e) {
       // Сеть не дала отправить. Если события перестанут доходить у всех
@@ -123,12 +142,15 @@ class VmV3Client {
         final delay = Duration(milliseconds: 300 * (1 << (attempt - 1)));
         // Причина повтора и задержка: снаружи иначе виден только итог, и
         // «работает медленно» не отличить от «не работает».
-        _log.debug('retrying check', data: {
-          'attempt': attempt + 1,
-          'of': maxRetries + 1,
-          'afterMs': delay.inMilliseconds,
-          'reason': _reasonOf(lastError),
-        });
+        _log.debug(
+          'retrying check',
+          data: {
+            'attempt': attempt + 1,
+            'of': maxRetries + 1,
+            'afterMs': delay.inMilliseconds,
+            'reason': _reasonOf(lastError),
+          },
+        );
         await Future<void>.delayed(delay);
       }
       try {
@@ -141,8 +163,10 @@ class VmV3Client {
           // Попытки кончились, а сервер всё ещё отвечает ошибкой. Ответ
           // возвращаем как есть — его разбирает вызывающий, — но это отказ,
           // и в логе он должен быть отказом.
-          _log.error('server still failing after all attempts',
-              data: {'attempts': attempt + 1, 'status': res.statusCode});
+          _log.error(
+            'server still failing after all attempts',
+            data: {'attempts': attempt + 1, 'status': res.statusCode},
+          );
         } else if (attempt > 0) {
           _log.info('request succeeded after retries', data: {'attempts': attempt + 1});
         }
@@ -155,8 +179,11 @@ class VmV3Client {
         lastError = e;
       }
     }
-    _log.error('request failed after all attempts',
-        error: lastError, data: {'attempts': maxRetries + 1, 'reason': _reasonOf(lastError)});
+    _log.error(
+      'request failed after all attempts',
+      error: lastError,
+      data: {'attempts': maxRetries + 1, 'reason': _reasonOf(lastError)},
+    );
     if (lastError is VmApiException) throw lastError;
     throw VmNetworkException(lastError.toString());
   }
@@ -174,13 +201,47 @@ class VmV3Client {
 }
 
 /// Сервер ответил ошибкой.
+///
+/// Тело приходит как `application/problem+json`: машинный [code], человеческий
+/// [detail] и [requestId], по которому владелец приложения находит этот самый
+/// вызов в логах Version Manager. Для неверного ключа сервер отвечает 403, а не
+/// 401: ключ опознаёт приложение, а не пользователя, и 401 в хост-приложении
+/// обычно означает «сессия истекла».
 class VmApiException implements Exception {
   final int statusCode;
   final String body;
-  VmApiException(this.statusCode, this.body);
+  final String? code;
+  final String? detail;
+  final String? requestId;
+
+  VmApiException(this.statusCode, this.body, {this.code, this.detail, this.requestId});
+
+  /// Разбирает problem+json. Тело, которое разобрать не удалось (например,
+  /// HTML от прокси), сохраняется как есть — пустая ошибка хуже любого текста.
+  factory VmApiException.fromResponse(int statusCode, String body) {
+    try {
+      final map = jsonDecode(body) as Map<String, dynamic>;
+      return VmApiException(
+        statusCode,
+        body,
+        code: map['code'] as String?,
+        detail: map['detail'] as String?,
+        requestId: map['requestId'] as String?,
+      );
+    } catch (_) {
+      return VmApiException(statusCode, body);
+    }
+  }
+
+  /// Ключ приложения не принят: не передан, неизвестен или отозван.
+  bool get isBadKey => code == 'INVALID_API_KEY';
 
   @override
-  String toString() => 'VmApiException($statusCode): $body';
+  String toString() {
+    final what = detail ?? body;
+    final id = requestId != null ? ', requestId $requestId' : '';
+    return 'VmApiException(${code ?? statusCode}): $what (HTTP $statusCode$id)';
+  }
 }
 
 /// До сервера не достучались: нет сети, таймаут, оборванное соединение.
