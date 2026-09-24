@@ -112,9 +112,9 @@ class NotificationStyle {
     return NotificationStyle(
       cornerRadius: corners is num ? corners.toDouble() : 16,
       fullscreen: json['fullscreen'] as bool? ?? false,
-      colors: json['background'] != null
-          ? NotificationColors(background: _colorOr(json['background'], const NotificationColors().background)!)
-          : const NotificationColors(),
+      // Палитра карточки достаётся её детям: цвет текста, акцент кнопок и
+      // подложка нужны узлам, у которых своего цвета нет.
+      colors: _colors(json),
       gradient: gradientJson != null ? NotificationGradient.fromJson(gradientJson) : null,
       border: borderJson != null ? NotificationBorder.fromJson(borderJson) : null,
       shadow: NotificationShadow.fromJson(json['shadow'] as String?),
@@ -300,6 +300,22 @@ class NotificationButtonConfig {
   }
 
   String labelFor(String locale) => vmPickLocalized(label, locale);
+}
+
+/// Палитра карточки. `background` строкой рядом с `colors` — короткая запись
+/// одного лишь фона: так карточку писала админка до появления палитры.
+NotificationColors _colors(Map<String, dynamic> json) {
+  final raw = json['colors'];
+  final base = raw is Map<String, dynamic> ? NotificationColors.fromJson(raw) : const NotificationColors();
+  final only = _colorOr(json['background'], null);
+  if (only == null) return base;
+  return NotificationColors(
+    background: only,
+    surface: base.surface,
+    text: base.text,
+    accent: base.accent,
+    overlay: base.overlay,
+  );
 }
 
 EdgeInsets? _insets(dynamic raw) {

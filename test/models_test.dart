@@ -75,6 +75,26 @@ void main() {
     expect(style.handleColor, isNotNull);
   });
 
+  test('палитра карточки достаётся детям, у которых своего цвета нет', () {
+    final style = NotificationStyle.fromJson({
+      'colors': {'background': '#101418', 'surface': '#1a1e24', 'text': '#ff0000', 'accent': '#00ff00'},
+    });
+
+    expect(style.colors.text, const Color(0xFFFF0000));
+    expect(style.colors.accent, const Color(0xFF00FF00));
+  });
+
+  test('одиночный background перебивает фон палитры', () {
+    // Короткая запись: так карточку писала админка до появления палитры.
+    final style = NotificationStyle.fromJson({
+      'colors': {'background': '#101418', 'text': '#ff0000'},
+      'background': '#000000',
+    });
+
+    expect(style.colors.background, const Color(0xFF000000));
+    expect(style.colors.text, const Color(0xFFFF0000));
+  });
+
   test('дерево блоков читает коробку, текст, картинку и кнопки', () {
     final style = NotificationStyle.fromJson({
       'children': [
