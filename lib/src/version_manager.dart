@@ -535,6 +535,13 @@ class VersionManager {
       onLocalPush: onLocalPush,
       bannerDuration: bannerDuration,
       onEvent: (id, type) => recordEvent(id, type),
+      // Пустая карточка не показывается: под ней осталось бы одно затемнение,
+      // и экран выглядел бы зависшим. Сообщение, у которого нечего рисовать, —
+      // ошибка в админке, поэтому её видно в логе.
+      onEmpty: (p) => _log.warning(
+        'notification has nothing to draw and was skipped',
+        data: {'id': p.id, 'type': p.type},
+      ),
     );
     // Модалка и шторка перекрывают друг друга, поэтому следующий показ
     // ждёт, пока пользователь закроет предыдущий.

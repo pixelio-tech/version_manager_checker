@@ -33,6 +33,8 @@ void presentVmNotification(
   required VmNotificationAction onAction,
   VmNotificationEvent? onEvent,
   void Function(NotificationPayload payload)? onLocalPush,
+  /// Вызывается вместо показа, когда в оформлении не осталось ни одного узла.
+  void Function(NotificationPayload payload)? onEmpty,
   Duration bannerDuration = const Duration(seconds: 5),
 }) {
   void handleButton(NotificationButtonConfig button) {
@@ -45,6 +47,17 @@ void presentVmNotification(
     final kind = payload.action['kind'] as String?;
     final value = (payload.action['url'] ?? payload.action['deeplink'] ?? payload.action['value']) as String?;
     if (kind != null) onAction(kind, value);
+  }
+
+  // Карточка без детей рисуется в ничто, а затемнение под ней остаётся:
+  // экран выглядит зависшим, и закрыть его можно только тапом мимо. Пустым
+  // дерево приходит и само по себе, и когда все узлы оказались незнакомы
+  // этой сборке SDK и отпали при деградации. Показывать нечего — не
+  // показываем и говорим об этом вслух.
+  final drawsItself = payload.type == 'banner' || payload.type == 'modal' || payload.type == 'bottomSheet';
+  if (drawsItself && payload.style.blocks.isEmpty) {
+    onEmpty?.call(payload);
+    return;
   }
 
   switch (payload.type) {

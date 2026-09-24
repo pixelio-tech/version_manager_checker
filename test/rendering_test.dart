@@ -37,7 +37,13 @@ NotificationPayload _payload({
 });
 
 /// Прокликиваемая обёртка: показывает уведомление и копит события воронки.
-Widget _host({required NotificationPayload payload, required List<String> events, List<String>? actions, String locale = 'ru'}) =>
+Widget _host({
+  required NotificationPayload payload,
+  required List<String> events,
+  List<String>? actions,
+  List<String>? skipped,
+  String locale = 'ru',
+}) =>
     MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -49,6 +55,7 @@ Widget _host({required NotificationPayload payload, required List<String> events
                 locale: locale,
                 onAction: (kind, value) => actions?.add('$kind:${value ?? ''}'),
                 onEvent: (id, type) => events.add('$id:$type'),
+                onEmpty: (p) => skipped?.add(p.id),
               ),
               child: const Text('показать'),
             ),
@@ -58,6 +65,28 @@ Widget _host({required NotificationPayload payload, required List<String> events
     );
 
 void main() {
+  testWidgets('карточка без детей не показывается — затемнение без содержимого хуже', (tester) async {
+    // Пустым дерево приходит и само по себе, и когда все узлы оказались
+    // незнакомы этой сборке SDK. Показать «ничего» поверх затемнения значит
+    // запереть экран: закрыть такое можно только тапом мимо карточки.
+    for (final type in ['modal', 'bottomSheet', 'banner']) {
+      final events = <String>[];
+      final skipped = <String>[];
+      await tester.pumpWidget(_host(payload: _payload(type: type), events: events, skipped: skipped));
+
+      await tester.tap(find.text('показать'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(skipped, ['n1'], reason: '$type с пустым деревом должен быть пропущен');
+      expect(events, isEmpty, reason: '$type ничего не нарисовал — показа не было');
+      // Ни одного нового маршрута: затемнение поверх экрана без карточки —
+      // это и есть «приложение зависло» глазами пользователя.
+      expect(find.byType(Dialog), findsNothing, reason: '$type открыл пустое окно');
+      expect(find.byType(BottomSheet), findsNothing, reason: '$type открыл пустую шторку');
+    }
+  });
+
   testWidgets('баннер рисует блоки и шлёт shown', (tester) async {
     final events = <String>[];
     await tester.pumpWidget(
