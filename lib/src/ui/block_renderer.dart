@@ -62,29 +62,40 @@ class NotificationBlocks extends StatelessWidget {
     return out;
   }
 
+  /// Текстовый узел без обёрток: выравнивание, типографика, обрезка строк.
+  Widget _text(TextBlock b, NotificationStyle style) => Text(
+    _transformed(b),
+    maxLines: b.maxLines,
+    overflow: b.maxLines != null ? TextOverflow.ellipsis : null,
+    textAlign: switch (b.align) {
+      'center' => TextAlign.center,
+      'right' => TextAlign.end,
+      'justify' => TextAlign.justify,
+      _ => TextAlign.start,
+    },
+    style: TextStyle(
+      color: (b.color ?? style.colors.text).withValues(alpha: b.opacity),
+      fontSize: b.size,
+      height: b.lineHeight,
+      fontWeight: FontWeight.values[(b.weight ~/ 100).clamp(1, 9) - 1],
+      letterSpacing: b.letterSpacing,
+      fontStyle: b.italic ? FontStyle.italic : null,
+      decoration: b.underline ? TextDecoration.underline : null,
+      fontFamily: b.font == 'mono' ? 'monospace' : null,
+    ),
+  );
+
   Widget _render(NotificationBlock block, {required bool isRow}) {
     var child = switch (block) {
-      TextBlock b => Text(
-        _transformed(b),
-        maxLines: b.maxLines,
-        overflow: b.maxLines != null ? TextOverflow.ellipsis : null,
-        textAlign: switch (b.align) {
-          'center' => TextAlign.center,
-          'right' => TextAlign.end,
-          'justify' => TextAlign.justify,
-          _ => TextAlign.start,
-        },
-        style: TextStyle(
-          color: (b.color ?? style.colors.text).withValues(alpha: b.opacity),
-          fontSize: b.size,
-          height: b.lineHeight,
-          fontWeight: FontWeight.values[(b.weight ~/ 100).clamp(1, 9) - 1],
-          letterSpacing: b.letterSpacing,
-          fontStyle: b.italic ? FontStyle.italic : null,
-          decoration: b.underline ? TextDecoration.underline : null,
-          fontFamily: b.font == 'mono' ? 'monospace' : null,
-        ),
+      // Текст с выравниванием по центру или по правому краю занимает всю
+      // ширину: иначе короткая строка ужимается по содержимому и стоит слева,
+      // хотя в конструкторе выбрали «по центру». Превью в админке рисует её
+      // по центру, и телефон обязан совпадать.
+      TextBlock b when b.align == 'center' || b.align == 'right' => SizedBox(
+        width: double.infinity,
+        child: _text(b, style),
       ),
+      TextBlock b => _text(b, style),
       ImageBlock b => _image(b),
       StackBlock b => Stack(
         alignment: switch (b.alignment) {

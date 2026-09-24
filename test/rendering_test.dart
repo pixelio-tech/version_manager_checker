@@ -87,6 +87,45 @@ void main() {
     }
   });
 
+  testWidgets('текст по центру занимает всю ширину, даже в колонке по левому краю', (tester) async {
+    // Внутри колонки с выравниванием «по началу» короткая строка ужималась по
+    // содержимому и вставала слева, хотя в конструкторе выбрали «по центру»
+    // и превью в админке рисовало её посередине.
+    final events = <String>[];
+    await tester.pumpWidget(
+      _host(
+        payload: _payload(
+          type: 'modal',
+          blocks: [
+            {
+              'id': 'col',
+              'type': 'column',
+              'gap': 6,
+              'align': 'start',
+              'justify': 'start',
+              'padding': 0,
+              'radius': 0,
+              'children': [
+                {..._text('t1', 'Коротко'), 'align': 'center'},
+                _text('t2', 'Очень длинная строка, которая сама занимает всю ширину карточки целиком'),
+              ],
+            },
+          ],
+        ),
+        events: events,
+      ),
+    );
+
+    await tester.tap(find.text('показать'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final short = tester.getRect(find.text('Коротко'));
+    final long = tester.getRect(find.text('Очень длинная строка, которая сама занимает всю ширину карточки целиком'));
+    expect(short.width, closeTo(long.width, 1), reason: 'строка по центру не растянулась на ширину колонки');
+    expect(short.center.dx, closeTo(long.center.dx, 1));
+  });
+
   testWidgets('баннер рисует блоки и шлёт shown', (tester) async {
     final events = <String>[];
     await tester.pumpWidget(
