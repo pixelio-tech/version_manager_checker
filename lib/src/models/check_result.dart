@@ -1,6 +1,6 @@
 import 'notification_style.dart';
 
-/// Response of `POST /api/mobile/v1/check-version` (see
+/// Response of `POST /api/mobile/v2/check-version` (see
 /// `version_manager_v3_back/internal/check/compute.go` `Result`).
 class CheckResult {
   final String status; // active | update_available | blocked | maintenance
@@ -51,7 +51,17 @@ class RecommendedVersion {
   final int buildNumber;
   final List<StoreLink> storeLinks;
   final String changelog;
+
+  /// Как часто напоминать: every_launch | one_time | every_nth | every_x_hours.
+  /// Считает это клиент — сервер видит проверки, а не запуски приложения.
+  /// Применяет [VersionManager.shouldRemindAboutUpdate].
   final String frequency;
+
+  /// Параметр режима `every_nth` — показывать на каждом N-м запуске.
+  final int? everyNth;
+
+  /// Параметр режима `every_x_hours` — не чаще раза в N часов.
+  final int? periodHours;
 
   const RecommendedVersion({
     required this.versionNumber,
@@ -59,6 +69,8 @@ class RecommendedVersion {
     required this.storeLinks,
     required this.changelog,
     required this.frequency,
+    this.everyNth,
+    this.periodHours,
   });
 
   factory RecommendedVersion.fromJson(Map<String, dynamic> json) => RecommendedVersion(
@@ -66,7 +78,9 @@ class RecommendedVersion {
     buildNumber: (json['buildNumber'] as num).toInt(),
     storeLinks: (json['storeLinks'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().map(StoreLink.fromJson).toList(),
     changelog: json['changelog'] as String? ?? '',
-    frequency: json['frequency'] as String? ?? 'once',
+    frequency: json['frequency'] as String? ?? 'every_launch',
+    everyNth: (json['everyNth'] as num?)?.toInt(),
+    periodHours: (json['periodHours'] as num?)?.toInt(),
   );
 }
 

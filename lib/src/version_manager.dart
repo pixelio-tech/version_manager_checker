@@ -8,8 +8,10 @@ import 'client.dart';
 import 'log.dart';
 import 'models/check_result.dart';
 import 'outcome.dart';
+import 'reminder.dart';
 import 'storage.dart';
 import 'ui/notification_presenter.dart';
+import 'ui/update_gate.dart';
 
 /// Точка входа пакета: помнит ключ и параметры сборки, сам держит
 /// `instanceId` и ETag, ходит на сервер и отдаёт результат.
@@ -100,6 +102,9 @@ class VersionManager {
   Timer? _poll;
   bool _disposed = false;
 
+  int _launch = 1;
+  VmReminderState _reminder = const VmReminderState();
+
   final _results = StreamController<CheckResult>.broadcast();
   final _failures = StreamController<Object>.broadcast();
 
@@ -178,6 +183,7 @@ class VersionManager {
       it._instanceId = await store.read(_kInstanceId) ?? await it._newInstanceId();
       it._etag = await store.read(_kEtag);
       await it._loadCache();
+      await it._countLaunch();
     } catch (e, st) {
       it._log.error('storage is unavailable, continuing without it', error: e, stackTrace: st);
       it._instanceId ??= await it._newInstanceId();
@@ -192,6 +198,7 @@ class VersionManager {
         'hasStoredEtag': it._etag != null,
         'hasCachedConfig': it._last != null,
         'cacheTtlDays': cacheTtl.inDays,
+        'launch': it._launch,
       },
     );
     return it;
@@ -201,6 +208,10 @@ class VersionManager {
   static const _kEtag = 'vm.etag';
   static const _kConfig = 'vm.config';
   static const _kConfigAt = 'vm.configAt';
+  static const _kLaunch = 'vm.launch';
+  static const _kRemindTarget = 'vm.remind.target';
+  static const _kRemindLaunch = 'vm.remind.launch';
+  static const _kRemindAt = 'vm.remind.at';
 
   /// Идентификатор установки: по нему сервер считает частоту показов.
   String get instanceId => _instanceId ?? '';
@@ -222,6 +233,68 @@ class VersionManager {
   bool get hasFreshCache {
     final age = cacheAge;
     return _last != null && age != null && cacheTtl > Duration.zero && age <= cacheTtl;
+  }
+
+  /// Номер текущего запуска приложения, считая с первой установки.
+  ///
+  /// Растёт один раз за [init], а не за проверку: за один старт проверок
+  /// бывает несколько, и «каждый N-й запуск» из админки считался бы вчетверо
+  /// чаще обещанного.
+  int get launchCount => _launch;
+
+  /// Показывать ли сейчас напоминание об обновлении.
+  ///
+  /// Режим напоминания задаёт админка (`recommendedVersion.frequency`), но
+  /// считать его может только клиент — см. [vmShouldRemind]. Показав
+  /// напоминание, отметьте это через [markUpdateReminderShown], иначе режимы
+  /// «один раз», «каждый N-й» и «раз в N часов» не сдвинутся с места.
+  ///
+  /// Обязательное обновление и блокировка версии отвечают `true` всегда:
+  /// частота — про вежливое напоминание, а запереть приложение она не мешает.
+  ///
+  /// ```dart
+  /// if (vm.shouldRemindAboutUpdate()) {
+  ///   await showUpdateDialog(context, result.recommendedVersion!);
+  ///   await vm.markUpdateReminderShown();
+  /// }
+  /// ```
+  bool shouldRemindAboutUpdate([CheckResult? result]) {
+    final data = result ?? _last;
+    final version = data?.recommendedVersion;
+    if (data == null || version == null) return false;
+    if (vmVerdictFor(data) == VmGateVerdict.block) return true;
+    return vmShouldRemind(version: version, state: _reminder, launch: _launch, now: DateTime.now());
+  }
+
+  /// Отмечает, что напоминание показали: с этого момента режим отсчитывает
+  /// паузу. Состояние переживает перезапуск приложения.
+  Future<void> markUpdateReminderShown([CheckResult? result]) async {
+    final version = (result ?? _last)?.recommendedVersion;
+    if (version == null) return;
+    final now = DateTime.now();
+    _reminder = VmReminderState(target: version.buildNumber, shownAtLaunch: _launch, shownAt: now);
+    try {
+      await storage.write(_kRemindTarget, '${version.buildNumber}');
+      await storage.write(_kRemindLaunch, '$_launch');
+      await storage.write(_kRemindAt, now.toUtc().toIso8601String());
+    } catch (e, st) {
+      // Не смертельно: напоминание просто придёт снова на следующем запуске.
+      _log.warning('failed to store the reminder state', error: e, data: {'trace': st.toString()});
+    }
+  }
+
+  /// Увеличивает счётчик запусков и поднимает состояние напоминаний.
+  Future<void> _countLaunch() async {
+    final stored = int.tryParse(await storage.read(_kLaunch) ?? '') ?? 0;
+    _launch = stored + 1;
+    await storage.write(_kLaunch, '$_launch');
+
+    final at = await storage.read(_kRemindAt);
+    _reminder = VmReminderState(
+      target: int.tryParse(await storage.read(_kRemindTarget) ?? ''),
+      shownAtLaunch: int.tryParse(await storage.read(_kRemindLaunch) ?? ''),
+      shownAt: at == null ? null : DateTime.tryParse(at)?.toLocal(),
+    );
   }
 
   Future<String> _newInstanceId() async {
