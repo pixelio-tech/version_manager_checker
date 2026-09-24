@@ -86,12 +86,22 @@ class NotificationBlocks extends StatelessWidget {
         ),
       ),
       ImageBlock b => _image(b),
+      StackBlock b => Stack(
+        alignment: switch (b.alignment) {
+          'topRight' => Alignment.topRight,
+          'bottomLeft' => Alignment.bottomLeft,
+          'bottomRight' => Alignment.bottomRight,
+          'center' => Alignment.center,
+          _ => Alignment.topLeft,
+        },
+        children: [for (final child in b.children) _render(child, isRow: false)],
+      ),
       IconBlock b => NotificationIconBadge(
         style: style,
         size: b.size,
-        overrideSource: b.source,
-        overrideUrl: b.url,
-        overrideShape: b.shape,
+        source: b.source,
+        url: b.url,
+        shape: b.shape,
       ),
       ButtonsBlock b => NotificationButtonsRow(
         style: style,

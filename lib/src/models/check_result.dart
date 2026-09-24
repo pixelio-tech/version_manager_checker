@@ -106,8 +106,10 @@ class NotificationPayload {
     title: json['title'] as String? ?? '',
     body: json['body'] as String? ?? '',
     action: json['action'] is Map<String, dynamic> ? json['action'] as Map<String, dynamic> : const {},
-    style: json['style'] is Map<String, dynamic>
-        ? NotificationStyle.fromJson(json['style'] as Map<String, dynamic>)
+    // `ui` — дерево оформления (корень card). Старое плоское `style` приходит
+    // только с замороженной ручки v1, куда этот пакет больше не ходит.
+    style: json['ui'] is Map<String, dynamic>
+        ? NotificationStyle.fromJson(json['ui'] as Map<String, dynamic>)
         : const NotificationStyle(),
   );
 }

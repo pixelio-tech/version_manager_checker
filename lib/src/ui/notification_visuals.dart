@@ -33,28 +33,6 @@ BoxDecoration notificationCardDecoration(NotificationStyle style, {required bool
   );
 }
 
-/// Title/body text styles driven by `style.typography`, so a card looks the
-/// same on device as it did in the constructor's preview. [bump] nudges the
-/// scale for the roomier surfaces (modal, fullscreen).
-TextStyle notificationTitleStyle(NotificationStyle style, {double bump = 0}) => TextStyle(
-  color: style.colors.text,
-  fontSize: style.typography.titleSize + bump,
-  height: style.typography.lineHeight,
-  fontWeight: FontWeight.values[(style.typography.titleWeight ~/ 100).clamp(1, 9) - 1],
-);
-
-TextStyle notificationBodyStyle(NotificationStyle style, {double bump = 0}) => TextStyle(
-  color: style.colors.text.withValues(alpha: 0.8),
-  fontSize: style.typography.bodySize + bump,
-  height: style.typography.lineHeight,
-);
-
-TextAlign notificationTextAlign(NotificationStyle style) =>
-    style.typography.align == 'center' ? TextAlign.center : TextAlign.start;
-
-CrossAxisAlignment notificationCrossAlign(NotificationStyle style) =>
-    style.typography.align == 'center' ? CrossAxisAlignment.center : CrossAxisAlignment.start;
-
 /// Картинка уведомления по её адресу. Конструктор умеет отдавать не только
 /// ссылку, но и `data:` — встроенный base64 (так в админку попадают
 /// загруженные файлы). `Image.network` такие адреса не понимает и молча
@@ -74,18 +52,6 @@ Widget notificationNetworkImage(String url, {double? width, double? height, BoxF
   return Image.network(url, width: width, height: height, fit: fit, errorBuilder: (_, _, _) => const SizedBox.shrink());
 }
 
-/// The configured picture, sized and fitted per `style.image`.
-Widget? notificationImage(NotificationStyle style, {double? radius}) {
-  final image = style.image;
-  if (image == null) return null;
-  final child = notificationNetworkImage(
-    image.url,
-    height: image.height,
-    width: double.infinity,
-    fit: image.fit == 'contain' ? BoxFit.contain : BoxFit.cover,
-  );
-  return radius == null || radius == 0 ? child : ClipRRect(borderRadius: BorderRadius.circular(radius), child: child);
-}
 
 /// Dismiss affordance drawn in the card's corner when `style.closeButton`.
 class NotificationCloseButton extends StatelessWidget {
@@ -129,10 +95,10 @@ class NotificationButtonsRow extends StatelessWidget {
   final void Function(NotificationButtonConfig button) onTap;
   final bool compact;
 
-  /// Кнопки блока; null — берём кнопки карточки (старая раскладка).
-  final List<NotificationButtonConfig>? buttons;
-  final ButtonsLayout? layout;
-  final NotificationButtonShape? shape;
+  /// Кнопки узла: у карточки своих кнопок нет.
+  final List<NotificationButtonConfig> buttons;
+  final ButtonsLayout layout;
+  final NotificationButtonShape shape;
 
   /// Отступ сверху: у блочной раскладки его задаёт промежуток контейнера.
   final double? topPadding;
@@ -146,20 +112,20 @@ class NotificationButtonsRow extends StatelessWidget {
     required this.locale,
     required this.onTap,
     this.compact = false,
-    this.buttons,
-    this.layout,
-    this.shape,
+    required this.buttons,
+    this.layout = ButtonsLayout.row,
+    this.shape = const NotificationButtonShape(),
     this.topPadding,
     this.gap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final list = buttons ?? style.buttons;
+    final list = buttons;
     if (list.isEmpty) return const SizedBox.shrink();
     final gap = this.gap ?? math.max(6.0, style.gap * 0.6);
-    final effectiveShape = shape ?? style.buttonShape;
-    final stacked = (layout ?? style.buttonsLayout) == ButtonsLayout.stack;
+    final effectiveShape = shape;
+    final stacked = layout == ButtonsLayout.stack;
     final buttonWidgets = [
       for (final b in list)
         _NotificationButton(
@@ -275,37 +241,33 @@ class _NotificationButton extends StatelessWidget {
 Color _onColor(Color bg) => ThemeData.estimateBrightnessForColor(bg) == Brightness.light ? const Color(0xFF141821) : Colors.white;
 
 /// App/custom icon badge, or nothing when `icon.source == none`.
+/// Иконка узла `icon`. Все свойства приходят из узла: у карточки своей
+/// иконки больше нет — она сама узел дерева.
 class NotificationIconBadge extends StatelessWidget {
   final NotificationStyle style;
-
-  /// Overrides `style.icon.size` — used by the roomier surfaces.
-  final double? size;
-
-  /// Переопределения из блока иконки (конструктор на блоках).
-  final String? overrideSource;
-  final String? overrideUrl;
-  final String? overrideShape;
+  final double size;
+  final String source;
+  final String? url;
+  final String shape;
 
   const NotificationIconBadge({
     super.key,
     required this.style,
-    this.size,
-    this.overrideSource,
-    this.overrideUrl,
-    this.overrideShape,
+    required this.size,
+    required this.source,
+    this.url,
+    this.shape = 'squircle',
   });
 
   @override
   Widget build(BuildContext context) {
-    final source = overrideSource ?? style.icon.source;
-    final url = overrideUrl ?? style.icon.url;
     if (source == 'none') return const SizedBox.shrink();
-    final size = this.size ?? style.icon.size;
-    final radius = BorderRadius.circular(switch (overrideShape ?? style.icon.shape) {
+    final radius = BorderRadius.circular(switch (shape) {
       'circle' => size,
       'square' => 4,
       _ => size * 0.28,
     });
+    final url = this.url;
     if (source == 'custom' && url != null) {
       return ClipRRect(
         borderRadius: radius,

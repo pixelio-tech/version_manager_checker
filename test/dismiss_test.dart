@@ -21,15 +21,16 @@ NotificationPayload _payload({
   'title': 'Заголовок',
   'body': 'Текст',
   'action': {'kind': 'dismiss'},
-  'style': {
-    'cornerRadius': 16,
+  'ui': {
+    'v': 1,
+    'type': 'card',
+    'corners': 16,
     'padding': 16,
     'gap': 12,
-    'colors': {'background': '#141821', 'surface': '#1c212c', 'text': '#f4f6f8', 'accent': '#5b8cff'},
-    'icon': {'source': 'none'},
+    'background': '#141821',
     // Специально выключено: крестик обязан появиться всё равно.
-    'closeButton': false,
-    'blocks': blocks,
+    'closeButton': {'show': false},
+    'children': blocks,
     ...style,
   },
 });

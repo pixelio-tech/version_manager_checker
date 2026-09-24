@@ -116,63 +116,13 @@ class _BannerNotificationState extends State<BannerNotification> with SingleTick
               width: double.infinity,
               // Поля раздают сами блоки (см. NotificationBlocks), поэтому у
               // карточки их нет: блок «край в край» упирается в её границу.
-              padding: _style.blocks.isEmpty ? _style.paddingInsets : EdgeInsets.zero,
+              padding: EdgeInsets.zero,
               clipBehavior: Clip.antiAlias,
               decoration: notificationCardDecoration(_style, onSurface: false),
               constraints: _style.maxWidth != null ? BoxConstraints(maxWidth: _style.maxWidth!) : null,
               child: Stack(
                 children: [
-                  if (_style.blocks.isNotEmpty)
-                    NotificationBlocks(style: _style, locale: widget.locale, onButtonTap: widget.onButtonTap)
-                  else
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_style.image?.position == 'top' && _style.image != null) ...[
-                          notificationImage(_style, radius: _style.cornerRadius - 4)!,
-                          SizedBox(height: _style.gap),
-                        ],
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_style.icon.source != 'none') ...[
-                              NotificationIconBadge(style: _style),
-                              SizedBox(width: _style.gap),
-                            ],
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: notificationCrossAlign(_style),
-                                children: [
-                                  Text(
-                                    widget.payload.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: notificationTextAlign(_style),
-                                    style: notificationTitleStyle(_style),
-                                  ),
-                                  SizedBox(height: _style.gap * 0.35),
-                                  Text(
-                                    widget.payload.body,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: notificationTextAlign(_style),
-                                    style: notificationBodyStyle(_style),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_style.image?.position == 'bottom' && _style.image != null) ...[
-                          SizedBox(height: _style.gap),
-                          notificationImage(_style, radius: _style.cornerRadius - 4)!,
-                        ],
-                        NotificationButtonsRow(style: _style, locale: widget.locale, compact: true, onTap: widget.onButtonTap),
-                      ],
-                    ),
-                  // Крестик рисуется всегда: баннер и так уходит сам, но
-                  // закрыть его руками пользователь должен мочь в любой момент.
+                  NotificationBlocks(style: _style, locale: widget.locale, onButtonTap: widget.onButtonTap),
                   NotificationCloseButton.positioned(_style, _dismiss, inset: 6),
                 ],
               ),

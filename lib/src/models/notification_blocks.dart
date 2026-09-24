@@ -200,6 +200,18 @@ sealed class NotificationBlock {
           dashed: json['style'] == 'dashed',
           inset: (json['inset'] as num?)?.toDouble() ?? 0,
         );
+      case 'stack':
+        return StackBlock(
+          id: id,
+          flex: flex,
+          box: box,
+          children: (json['children'] as List<dynamic>? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .map(NotificationBlock.fromJson)
+              .whereType<NotificationBlock>()
+              .toList(),
+          alignment: json['alignment'] as String? ?? 'topLeft',
+        );
       case 'row':
       case 'column':
         return ContainerBlock(
@@ -221,10 +233,50 @@ sealed class NotificationBlock {
           wrap: json['wrap'] as bool? ?? false,
         );
       default:
-        // Неизвестный тип блока (клиент старее админки) просто пропускаем.
-        return null;
+        // Клиент старее админки. Лист пропускаем — рисовать нечем; а вот
+        // контейнер пропускать нельзя: вместе с ним исчезло бы поддерево, и
+        // добавление нового типа узла выключало бы половину карточки на всех
+        // прежних сборках. Поэтому незнакомый узел с детьми становится
+        // колонкой — раскладка беднее, содержимое на месте.
+        final children = (json['children'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(NotificationBlock.fromJson)
+            .whereType<NotificationBlock>()
+            .toList();
+        if (children.isEmpty) return null;
+        return ContainerBlock(
+          id: id,
+          flex: flex,
+          box: box,
+          isRow: false,
+          children: children,
+          gap: 10,
+          align: 'start',
+          justify: 'start',
+          padding: 0,
+          radius: 0,
+        );
     }
   }
+}
+
+/// Наложение: дети рисуются друг поверх друга.
+///
+/// Нужно там, где иначе пришлось бы городить обёртки: бейдж на картинке,
+/// текст поверх изображения. Позицию ребёнка задаёт его `box`.
+class StackBlock extends NotificationBlock {
+  final List<NotificationBlock> children;
+
+  /// topLeft | topRight | bottomLeft | bottomRight | center
+  final String alignment;
+
+  const StackBlock({
+    required super.id,
+    super.flex,
+    super.box,
+    required this.children,
+    this.alignment = 'topLeft',
+  });
 }
 
 class TextBlock extends NotificationBlock {

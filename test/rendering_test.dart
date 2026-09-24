@@ -23,13 +23,15 @@ NotificationPayload _payload({
   'title': 'Заголовок',
   'body': 'Текст',
   'action': {'kind': 'dismiss'},
-  'style': {
-    'cornerRadius': 16,
+  // Оформление — дерево: корень card, дети — узлы.
+  'ui': {
+    'v': 1,
+    'type': 'card',
+    'corners': 16,
     'padding': 16,
     'gap': 12,
-    'colors': {'background': '#141821', 'surface': '#1c212c', 'text': '#f4f6f8', 'accent': '#5b8cff'},
-    'icon': {'source': 'app'},
-    'blocks': blocks,
+    'background': '#141821',
+    'children': blocks,
     ...style,
   },
 });

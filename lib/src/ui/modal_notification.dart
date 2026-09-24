@@ -80,71 +80,15 @@ class ModalNotification extends StatelessWidget {
                 children: [
                   Flexible(
                     child: SingleChildScrollView(
-                      padding: style.blocks.isEmpty ? style.paddingInsets : EdgeInsets.zero,
-                      child: style.blocks.isNotEmpty
-                          ? NotificationBlocks(
-                              style: style,
-                              locale: locale,
-                              onButtonTap: (b) {
-                                onButtonTap(b);
-                                onDismiss();
-                              },
-                            )
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: notificationCrossAlign(style),
-                              children: [
-                                if (style.image?.position == 'top' && style.image != null) ...[
-                                  notificationImage(style, radius: 10)!,
-                                  SizedBox(height: style.gap),
-                                ],
-                                if (style.icon.source != 'none') ...[
-                                  Align(
-                                    alignment: style.typography.align == 'center' ? Alignment.center : Alignment.centerLeft,
-                                    child: NotificationIconBadge(style: style),
-                                  ),
-                                  SizedBox(height: style.gap),
-                                ],
-                                Text(
-                                  payload.title,
-                                  textAlign: notificationTextAlign(style),
-                                  style: notificationTitleStyle(style, bump: 2),
-                                ),
-                                SizedBox(height: style.gap * 0.4),
-                                Text(payload.body, textAlign: notificationTextAlign(style), style: notificationBodyStyle(style)),
-                                if (style.image?.position == 'bottom' && style.image != null) ...[
-                                  SizedBox(height: style.gap),
-                                  notificationImage(style, radius: 10)!,
-                                ],
-                                if (style.buttons.isEmpty)
-                                  Padding(
-                                    padding: EdgeInsets.only(top: style.gap),
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      height: style.buttonShape.height,
-                                      child: FilledButton(
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: style.colors.accent,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(style.buttonShape.radius),
-                                          ),
-                                        ),
-                                        onPressed: onDismiss,
-                                        child: const Text('Понятно'),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  NotificationButtonsRow(
-                                    style: style,
-                                    locale: locale,
-                                    onTap: (b) {
-                                      onButtonTap(b);
-                                      onDismiss();
-                                    },
-                                  ),
-                              ],
-                            ),
+                      padding: EdgeInsets.zero,
+                      child: NotificationBlocks(
+                        style: style,
+                        locale: locale,
+                        onButtonTap: (b) {
+                          onButtonTap(b);
+                          onDismiss();
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -180,19 +124,18 @@ class FullscreenNotification extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = payload.style;
-    final isBackgroundImage = style.image?.url != null && style.image!.position == 'background';
     final gradient = style.gradient;
+    // Картинка на фоне — это узел image «край в край» внутри stack: у карточки
+    // своей картинки больше нет, её описывает дерево.
     return Scaffold(
-      backgroundColor: isBackgroundImage || gradient != null ? null : style.colors.background,
+      backgroundColor: gradient != null ? null : style.colors.background,
       body: Container(
-        decoration: !isBackgroundImage && gradient != null
+        decoration: gradient != null
             ? notificationCardDecoration(style, onSurface: false, radius: BorderRadius.zero)
             : null,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (isBackgroundImage)
-              notificationNetworkImage(style.image!.url, fit: style.image!.fit == 'contain' ? BoxFit.contain : BoxFit.cover),
             SafeArea(
               child: LayoutBuilder(
                 // Содержимое занимает весь экран (растяжимые отступы работают),
@@ -201,17 +144,15 @@ class FullscreenNotification extends StatelessWidget {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minHeight: constraints.maxHeight),
                     child: IntrinsicHeight(
-                      child: style.blocks.isNotEmpty
-                          ? NotificationBlocks(
-                              style: style,
-                              locale: locale,
-                              fill: true,
-                              onButtonTap: (b) {
-                                onButtonTap(b);
-                                onDismiss();
-                              },
-                            )
-                          : _legacyContent(style),
+                      child: NotificationBlocks(
+                        style: style,
+                        locale: locale,
+                        fill: true,
+                        onButtonTap: (b) {
+                          onButtonTap(b);
+                          onDismiss();
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -230,38 +171,4 @@ class FullscreenNotification extends StatelessWidget {
       ),
     );
   }
-
-  /// Прежняя раскладка для сообщений без дерева блоков.
-  Widget _legacyContent(NotificationStyle style) => Padding(
-    padding: EdgeInsets.symmetric(horizontal: style.padding + 12),
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (style.image?.url != null && style.image!.position != 'background')
-          Padding(
-            padding: EdgeInsets.only(bottom: style.gap),
-            child: notificationImage(style, radius: 20),
-          ),
-        if (style.icon.source != 'none') ...[
-          NotificationIconBadge(style: style, size: style.icon.size + 8),
-          SizedBox(height: style.gap),
-        ],
-        Text(payload.title, textAlign: TextAlign.center, style: notificationTitleStyle(style, bump: 4)),
-        SizedBox(height: style.gap * 0.5),
-        Text(payload.body, textAlign: TextAlign.center, style: notificationBodyStyle(style, bump: 1)),
-        if (style.buttons.isNotEmpty)
-          Padding(
-            padding: EdgeInsets.only(top: style.gap),
-            child: NotificationButtonsRow(
-              style: style,
-              locale: locale,
-              onTap: (b) {
-                onButtonTap(b);
-                onDismiss();
-              },
-            ),
-          ),
-      ],
-    ),
-  );
 }

@@ -72,7 +72,7 @@ class BottomSheetNotification extends StatelessWidget {
               onSurface: true,
               radius: BorderRadius.only(topLeft: Radius.circular(radius), topRight: Radius.circular(radius)),
             ),
-            padding: EdgeInsets.only(bottom: bottomInset).add(style.blocks.isEmpty ? style.paddingInsets : EdgeInsets.zero),
+            padding: EdgeInsets.only(bottom: bottomInset),
             clipBehavior: Clip.antiAlias,
             // Ручка лежит ПОВЕРХ содержимого: так под неё можно завести картинку
             // во всю ширину — ровно как показывает конструктор.
@@ -82,68 +82,14 @@ class BottomSheetNotification extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (style.blocks.isNotEmpty) ...[
-                        NotificationBlocks(
-                          style: style,
-                          locale: locale,
-                          onButtonTap: (b) {
-                            onButtonTap(b);
-                            onDismiss();
-                          },
-                        ),
-                      ] else ...[
-                        Container(
-                          width: 36,
-                          height: 4,
-                          margin: EdgeInsets.only(bottom: style.gap),
-                          decoration: BoxDecoration(
-                            color: style.colors.text.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        if (style.image?.position == 'top' && style.image != null) ...[
-                          notificationImage(style, radius: 12)!,
-                          SizedBox(height: style.gap),
-                        ],
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (style.icon.source != 'none') ...[NotificationIconBadge(style: style), SizedBox(width: style.gap)],
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: notificationCrossAlign(style),
-                                children: [
-                                  Text(
-                                    payload.title,
-                                    textAlign: notificationTextAlign(style),
-                                    style: notificationTitleStyle(style, bump: 1),
-                                  ),
-                                  SizedBox(height: style.gap * 0.35),
-                                  Text(
-                                    payload.body,
-                                    textAlign: notificationTextAlign(style),
-                                    style: notificationBodyStyle(style),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (style.buttons.isEmpty && !style.closeButton)
-                              Icon(Icons.chevron_right, color: style.colors.text.withValues(alpha: 0.4)),
-                          ],
-                        ),
-                        if (style.image?.position == 'bottom' && style.image != null) ...[
-                          SizedBox(height: style.gap),
-                          notificationImage(style, radius: 12)!,
-                        ],
-                        NotificationButtonsRow(
-                          style: style,
-                          locale: locale,
-                          onTap: (b) {
-                            onButtonTap(b);
-                            onDismiss();
-                          },
-                        ),
-                      ],
+                      NotificationBlocks(
+                        style: style,
+                        locale: locale,
+                        onButtonTap: (b) {
+                          onButtonTap(b);
+                          onDismiss();
+                        },
+                      ),
                     ],
                   ),
                 ),

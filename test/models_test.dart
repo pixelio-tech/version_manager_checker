@@ -25,10 +25,12 @@ void main() {
           'title': 'Привет',
           'body': 'Текст',
           'action': {'kind': 'dismiss'},
-          'style': {
-            'cornerRadius': 40,
+          'ui': {
+            'v': 1,
+            'type': 'card',
+            'corners': 40,
             'position': 'bottom',
-            'colors': {'background': '#101418', 'surface': '#1a1e24', 'text': '#ffffff', 'accent': '#5b8cff'},
+            'background': '#101418',
           },
         },
       ],
@@ -52,10 +54,8 @@ void main() {
       'screenMargin': 20,
       'maxWidth': 420,
       'shadowCustom': {'x': 0, 'y': 12, 'blur': 30, 'spread': 2, 'color': '#000000'},
-      'animationMs': 400,
-      'animationCurve': 'bounce',
-      'closeButtonPosition': 'left',
-      'closeButtonStyle': 'circle',
+      'animation': {'ms': 400, 'curve': 'bounce'},
+      'closeButton': {'show': true, 'position': 'left', 'style': 'circle'},
       'sheetHandle': false,
       'handleColor': '#ffffff55',
     });
@@ -68,6 +68,7 @@ void main() {
     expect(style.shadowCustom!.blurRadius, 30);
     expect(style.animationMs, 400);
     expect(style.curve, isNotNull);
+    expect(style.closeButton, isTrue);
     expect(style.closeButtonPosition, 'left');
     expect(style.closeButtonStyle, 'circle');
     expect(style.sheetHandle, isFalse);
@@ -76,7 +77,7 @@ void main() {
 
   test('дерево блоков читает коробку, текст, картинку и кнопки', () {
     final style = NotificationStyle.fromJson({
-      'blocks': [
+      'children': [
         {
           'id': 'text',
           'type': 'text',
@@ -190,9 +191,9 @@ void main() {
     expect((row.children.single as IconBlock).shape, 'circle');
   });
 
-  test('неизвестный тип блока пропускается, старое сообщение остаётся валидным', () {
+  test('неизвестный лист пропускается, остальное сообщение остаётся валидным', () {
     final style = NotificationStyle.fromJson({
-      'blocks': [
+      'children': [
         {'id': 'x', 'type': 'video', 'url': 'https://x/v.mp4'},
         {
           'id': 't',
@@ -204,5 +205,54 @@ void main() {
 
     expect(style.blocks, hasLength(1));
     expect((style.blocks.single as TextBlock).textFor('ru'), 'ок');
+  });
+
+  test('неизвестный узел с детьми рисуется колонкой', () {
+    // Деградация: тип узла добавили на сервере позже этой сборки SDK. Выкинуть
+    // его вместе с детьми значило бы потерять текст сообщения, поэтому дети
+    // рисуются колонкой — сообщение остаётся читаемым.
+    final style = NotificationStyle.fromJson({
+      'children': [
+        {
+          'id': 'grid',
+          'type': 'grid',
+          'children': [
+            {
+              'id': 't',
+              'type': 'text',
+              'text': {'ru': 'ок'},
+            },
+          ],
+        },
+      ],
+    });
+
+    final node = style.blocks.single as ContainerBlock;
+    expect(node.isRow, isFalse);
+    expect((node.children.single as TextBlock).textFor('ru'), 'ок');
+  });
+
+  test('stack кладёт детей друг на друга', () {
+    final style = NotificationStyle.fromJson({
+      'children': [
+        {
+          'id': 's',
+          'type': 'stack',
+          'alignment': 'bottomRight',
+          'children': [
+            {'id': 'img', 'type': 'image', 'url': 'https://x/1.png'},
+            {
+              'id': 't',
+              'type': 'text',
+              'text': {'ru': 'поверх'},
+            },
+          ],
+        },
+      ],
+    });
+
+    final stack = style.blocks.single as StackBlock;
+    expect(stack.alignment, 'bottomRight');
+    expect(stack.children, hasLength(2));
   });
 }

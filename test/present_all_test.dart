@@ -11,13 +11,14 @@ Map<String, dynamic> _payload(String type, String title) => {
   'title': title,
   'body': 'Текст',
   'action': {'kind': 'dismiss'},
-  'style': {
-    'cornerRadius': 16,
+  'ui': {
+    'v': 1,
+    'type': 'card',
+    'corners': 16,
     'padding': 16,
     'gap': 12,
-    'colors': {'background': '#141821', 'surface': '#1c212c', 'text': '#f4f6f8', 'accent': '#5b8cff'},
-    'icon': {'source': 'none'},
-    'blocks': [
+    'background': '#141821',
+    'children': [
       {
         'id': 't',
         'type': 'text',
