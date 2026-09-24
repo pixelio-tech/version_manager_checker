@@ -2,7 +2,7 @@
 
 **Ломающее.** Оформление уведомления приходит одним деревом `ui`, а не полем
 `style` со списком блоков рядом. Корень дерева — карточка, дети — узлы;
-`NotificationStyle` теперь разбирает именно её (`background`, `corners`,
+`NotificationStyle` теперь разбирает именно её (`colors`, `corners`,
 `closeButton: {show, position, style}`, `animation: {ms, curve}`,
 `children`). Прежняя плоская форма осталась только на замороженном
 `/api/mobile/v1`, куда этот пакет больше не ходит.
