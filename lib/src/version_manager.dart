@@ -138,6 +138,16 @@ class VersionManager {
     VmLogSink? onLog,
   }) async {
     final store = storage ?? VmMemoryStorage();
+    if (storage == null) {
+      // Без постоянного хранилища instanceId новый на каждый запуск. Это не
+      // мелочь: сервер считает установки по нему, и статистика приложения
+      // превращается в поток «новых установок», а частотные ограничения
+      // показов считаются заново — человек видит одно и то же сообщение.
+      VmLog(onLog).error(
+        'storage not provided: every launch looks like a new install — '
+        'statistics and impression caps will be wrong; pass VmStorage backed by shared_preferences',
+      );
+    }
     final it = VersionManager._(
       client:
           client ??
