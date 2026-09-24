@@ -61,9 +61,6 @@ void presentVmNotification(
   }
 
   switch (payload.type) {
-    case 'silent':
-      onEvent?.call(payload.id, 'shown');
-      return;
     case 'localPush':
       onEvent?.call(payload.id, 'shown');
       onLocalPush?.call(payload);

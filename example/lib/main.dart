@@ -81,7 +81,6 @@ class _DemoHomeState extends State<DemoHome> {
           context,
           onAction: _action,
           onLocalPush: (p) => _say('локальный push: ${p.title}'),
-          onSilent: (p) => _say('тихое сообщение: ${p.id}'),
         );
       }
     } catch (e) {
@@ -122,7 +121,6 @@ class _DemoHomeState extends State<DemoHome> {
       onLocalPush: (p) => _say('локальный push: ${p.title} — рисует ОС, не пакет'),
       onEvent: (id, type) => _say('событие $type · $id'),
     );
-    if (payload.type == 'silent') _say('тихое сообщение: ничего не рисуем');
   }
 
   @override

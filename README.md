@@ -131,7 +131,6 @@ await VersionManager.instance.presentAll(
     }
   },
   onLocalPush: (p) => showLocalPush(p), // см. «Локальные пуши» ниже
-  onSilent: (payload) => handleSilently(payload),
 );
 ```
 
@@ -248,8 +247,7 @@ class PrefsStorage implements VmStorage {
 пропускается, остальное сообщение остаётся на экране.
 
 `localPush` — не карточка в дереве оформления, а системное уведомление; см.
-«Локальные пуши» выше. `silent` не рисуется по определению — приходит в
-`onSilent`.
+«Локальные пуши» выше.
 
 Частоту показов (`maxImpressions`, `minIntervalHours`) считает сервер, на
 клиенте дублировать её не нужно.

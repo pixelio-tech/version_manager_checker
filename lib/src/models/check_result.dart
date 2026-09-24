@@ -99,7 +99,7 @@ class StoreLink {
 /// default tap action. `type` drives which widget renders it.
 class NotificationPayload {
   final String id;
-  final String type; // banner | modal | bottomSheet | localPush | silent
+  final String type; // banner | modal | bottomSheet | localPush
   final String title;
   final String body;
   final Map<String, dynamic> action;

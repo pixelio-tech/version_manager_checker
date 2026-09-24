@@ -156,14 +156,6 @@ final demoNotifications = <String, NotificationPayload>{
     'action': {'kind': 'store'},
     'style': _style(blocks: []),
   }),
-  'Тихое': NotificationPayload.fromJson({
-    'id': 'demo-silent',
-    'type': 'silent',
-    'title': 'Тихое сообщение',
-    'body': 'Ничего не рисует, приходит в ответе API.',
-    'action': {'kind': 'dismiss'},
-    'style': _style(blocks: []),
-  }),
 };
 
 /// Ответ `check-version` для проверки экрана блокировки без сервера.

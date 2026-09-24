@@ -224,11 +224,14 @@ void main() {
     expect(find.text('EN Русский'), findsOneWidget);
   });
 
-  testWidgets('silent ничего не рисует, но считается показанным', (tester) async {
+  testWidgets('незнакомый тип не рисует ничего и не считается показанным', (tester) async {
+    // Тип сообщения — закрытый список, но админка может стать новее сборки
+    // SDK. Незнакомое сообщение молча пропускается: показать его нечем, а
+    // отчитываться о показе, которого не было, значит врать в статистике.
     final events = <String>[];
     await tester.pumpWidget(
       _host(
-        payload: _payload(type: 'silent'),
+        payload: _payload(type: 'carousel', blocks: [_text('t1', 'Не нарисуется')]),
         events: events,
       ),
     );
@@ -236,8 +239,8 @@ void main() {
     await tester.tap(find.text('показать'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Заголовок'), findsNothing);
-    expect(events, ['n1:shown']);
+    expect(find.text('Не нарисуется'), findsNothing);
+    expect(events, isEmpty);
   });
 
   testWidgets('блок «край в край» шире соседнего с полями', (tester) async {

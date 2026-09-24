@@ -480,7 +480,7 @@ class VersionManager {
       client.recordEvent(notificationId: notificationId, instanceId: instanceId, eventType: eventType);
 
   /// Показывает все уведомления из результата по очереди и сам отчитывается
-  /// о событиях воронки. `silent` не рисуется — его отдают в [onSilent].
+  /// о событиях воронки.
   ///
   /// [context] должен быть **ниже** `Navigator` — баннеры и шторки рисуются
   /// через `Overlay`, который живёт внутри него. Из `builder` у `MaterialApp`
@@ -495,7 +495,6 @@ class VersionManager {
     CheckResult? result,
     required VmNotificationAction onAction,
     void Function(NotificationPayload payload)? onLocalPush,
-    void Function(NotificationPayload payload)? onSilent,
     Duration bannerDuration = const Duration(seconds: 5),
     bool repeat = false,
   }) async {
@@ -526,7 +525,6 @@ class VersionManager {
           n,
           onAction: onAction,
           onLocalPush: onLocalPush,
-          onSilent: onSilent,
           bannerDuration: bannerDuration,
         );
       } catch (e, st) {
@@ -540,14 +538,8 @@ class VersionManager {
     NotificationPayload n, {
     required VmNotificationAction onAction,
     void Function(NotificationPayload payload)? onLocalPush,
-    void Function(NotificationPayload payload)? onSilent,
     required Duration bannerDuration,
   }) async {
-    if (n.type == 'silent') {
-      onSilent?.call(n);
-      await recordEvent(n.id, 'shown');
-      return;
-    }
     presentVmNotification(
       context,
       payload: n,
