@@ -105,6 +105,11 @@ class VersionManager {
   int _launch = 1;
   VmReminderState _reminder = const VmReminderState();
 
+  /// Что уже показано для конфига [_presentedHash] — по одному показу на
+  /// уведомление, пока сервер не пришлёт другой конфиг.
+  final Set<String> _presented = {};
+  String? _presentedHash;
+
   final _results = StreamController<CheckResult>.broadcast();
   final _failures = StreamController<Object>.broadcast();
 
@@ -492,11 +497,27 @@ class VersionManager {
     void Function(NotificationPayload payload)? onLocalPush,
     void Function(NotificationPayload payload)? onSilent,
     Duration bannerDuration = const Duration(seconds: 5),
+    bool repeat = false,
   }) async {
     final data = result ?? _last;
     if (data == null) return;
+    // Новый конфиг — новые показы: отметки прошлого конфига больше ни о чём
+    // не говорят.
+    if (data.configHash != _presentedHash) {
+      _presentedHash = data.configHash;
+      _presented.clear();
+    }
     for (final n in data.notifications) {
       if (!context.mounted) return;
+      // Одно и то же уведомление из одного и того же конфига показывается
+      // один раз. Хост зовёт этот метод откуда угодно — с экрана, из
+      // слушателя, после возврата из фона, — и человек не должен видеть
+      // карточку дважды подряд только потому, что экран пересобрался.
+      // [repeat] для тех, кто показывает намеренно (кнопка «показать ещё раз»).
+      if (!repeat && !_presented.add(n.id)) {
+        _log.debug('notification already shown for this config', data: {'id': n.id});
+        continue;
+      }
       // Показ обёрнут по одному: кривое оформление, пришедшее из админки,
       // должно гасить себя, а не остальные сообщения и не экран вокруг.
       try {
