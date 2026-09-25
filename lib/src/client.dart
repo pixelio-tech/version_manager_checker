@@ -136,9 +136,10 @@ class VmV3Client {
 
   /// Отмечает, что приложение прочитало вариант эксперимента [experimentKey].
   ///
-  /// Как и [recordEvent], не бросает: экспозиция уточняет отчёт, но
-  /// эксперимент считается и без неё — по назначениям на сервере.
-  Future<void> recordExposure({required String experimentKey, required String instanceId}) async {
+  /// Не бросает — говорит, что делать, как [sendEvents]: экспозицию зовёт
+  /// очередь [VmEventQueue], и при [VmSendResult.retry] она остаётся в
+  /// очереди до следующей отправки (version_manager_checker#16).
+  Future<VmSendResult> recordExposure({required String experimentKey, required String instanceId}) async {
     try {
       final res = await _send(
         () => _http.post(
@@ -147,19 +148,18 @@ class VmV3Client {
           body: jsonEncode({'experimentKey': experimentKey, 'instanceId': instanceId}),
         ),
       );
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        _log.warning(
-          'experiment exposure was not delivered',
-          error: VmApiException.fromResponse(res.statusCode, res.body),
-          data: {'experiment': experimentKey},
-        );
+      _log.debug('experiment exposure sent', data: {'experiment': experimentKey, 'status': res.statusCode});
+      if (res.statusCode >= 200 && res.statusCode < 300) return VmSendResult.sent;
+      final err = VmApiException.fromResponse(res.statusCode, res.body);
+      if (res.statusCode >= 500 || res.statusCode == 429 || res.statusCode == 403) {
+        _log.warning('experiment exposure was not delivered, will retry', error: err, data: {'experiment': experimentKey});
+        return VmSendResult.retry;
       }
-    } on VmNetworkException catch (e) {
-      _log.warning('experiment exposure was not delivered', error: e, data: {'experiment': experimentKey});
+      _log.error('experiment exposure was rejected and dropped', error: err, data: {'experiment': experimentKey});
+      return VmSendResult.rejected;
     } catch (e) {
-      // Экспозицию отправляют не дожидаясь ответа, поэтому любое исключение
-      // отсюда стало бы необработанной ошибкой в зоне приложения.
-      _log.warning('experiment exposure was not delivered', error: e, data: {'experiment': experimentKey});
+      _log.warning('experiment exposure was not delivered, will retry', error: e, data: {'experiment': experimentKey});
+      return VmSendResult.retry;
     }
   }
 

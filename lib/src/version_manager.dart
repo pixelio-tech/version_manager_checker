@@ -307,7 +307,7 @@ class VersionManager {
     final a = _last?.experiments[experimentKey];
     if (a == null || a.shipped) return;
     if (!_exposed.add(experimentKey)) return;
-    unawaited(client.recordExposure(experimentKey: experimentKey, instanceId: instanceId));
+    _events.addExposure(experimentKey);
   }
 
   /// Каждая неудавшаяся проверка. Подписка не обязательна: пакет уже пишет их
