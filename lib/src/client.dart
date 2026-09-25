@@ -148,6 +148,7 @@ class VmV3Client {
           body: jsonEncode({'experimentKey': experimentKey, 'instanceId': instanceId}),
         ),
       );
+      _log.debug('experiment exposure sent', data: {'experiment': experimentKey, 'status': res.statusCode});
       if (res.statusCode >= 200 && res.statusCode < 300) return VmSendResult.sent;
       final err = VmApiException.fromResponse(res.statusCode, res.body);
       if (res.statusCode >= 500 || res.statusCode == 429 || res.statusCode == 403) {
