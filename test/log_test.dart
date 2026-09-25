@@ -6,8 +6,7 @@ import 'package:http/testing.dart';
 import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
 
 /// Ответ `check-version`, какой отдаёт сервер.
-String _okBody() =>
-    jsonEncode({'status': 'up_to_date', 'nextCheckInterval': 3600, 'notifications': <Object>[]});
+String _okBody() => jsonEncode({'status': 'up_to_date', 'nextCheckInterval': 3600, 'notifications': <Object>[]});
 
 void main() {
   group('диагностика', () {
@@ -141,9 +140,8 @@ void main() {
         apiKey: 'vm_live_x',
         maxRetries: 0,
         httpClient: MockClient(
-          (r) async => r.url.path.endsWith('/notification-event')
-              ? http.Response('nope', 400)
-              : http.Response(_okBody(), 200),
+          (r) async =>
+              r.url.path.endsWith('/notification-event') ? http.Response('nope', 400) : http.Response(_okBody(), 200),
         ),
         onLog: events.add,
       );

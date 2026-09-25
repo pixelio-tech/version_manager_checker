@@ -6,10 +6,7 @@ import 'package:http/testing.dart';
 import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
 
 /// Форма ответа v2: полезная нагрузка на верхнем уровне, без конверта.
-Map<String, dynamic> _okBody({
-  String status = 'active',
-  List<Map<String, dynamic>> notifications = const [],
-}) => {
+Map<String, dynamic> _okBody({String status = 'active', List<Map<String, dynamic>> notifications = const []}) => {
   'status': status,
   'isBlocked': false,
   'blockReason': null,

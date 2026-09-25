@@ -43,9 +43,18 @@ MockClient _serving(List<Map<String, dynamic>> bodies) {
 
 void main() {
   test('flag отдаёт значение нужного типа или значение по умолчанию', () async {
-    final vm = await _manager(_serving([
-      _body({'new_checkout': false, 'limit_mb': 25, 'ratio': 1, 'title': 'Привет', 'cfg': {'a': 1}, 'wrong': 'yes'}),
-    ]));
+    final vm = await _manager(
+      _serving([
+        _body({
+          'new_checkout': false,
+          'limit_mb': 25,
+          'ratio': 1,
+          'title': 'Привет',
+          'cfg': {'a': 1},
+          'wrong': 'yes',
+        }),
+      ]),
+    );
     // До первого ответа — значения из кода.
     expect(vm.flag('new_checkout', true), isTrue);
 
@@ -64,7 +73,12 @@ void main() {
 
   test('флаги переживают перезапуск и работают без сети', () async {
     final storage = VmMemoryStorage();
-    final first = await _manager(_serving([_body({'kill': true})]), storage: storage);
+    final first = await _manager(
+      _serving([
+        _body({'kill': true}),
+      ]),
+      storage: storage,
+    );
     await first.check();
     first.dispose();
 
@@ -77,11 +91,13 @@ void main() {
   });
 
   test('flagChanges срабатывает только когда значения поменялись', () async {
-    final vm = await _manager(_serving([
-      _body({'a': true}, hash: 'h1'),
-      _body({'a': true}, hash: 'h2'),
-      _body({'a': false}, hash: 'h3'),
-    ]));
+    final vm = await _manager(
+      _serving([
+        _body({'a': true}, hash: 'h1'),
+        _body({'a': true}, hash: 'h2'),
+        _body({'a': false}, hash: 'h3'),
+      ]),
+    );
     final seen = <Map<String, Object?>>[];
     final sub = vm.flagChanges.listen(seen.add);
     await vm.check(force: true);

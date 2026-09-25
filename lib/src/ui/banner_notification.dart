@@ -99,7 +99,10 @@ class _BannerNotificationState extends State<BannerNotification> with SingleTick
     final beginOffset = position == NotificationPosition.bottom ? const Offset(0, 1) : const Offset(0, -1);
 
     final card = SlideTransition(
-      position: Tween(begin: beginOffset, end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: _style.curve)),
+      position: Tween(
+        begin: beginOffset,
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: _controller, curve: _style.curve)),
       child: FadeTransition(
         opacity: _controller,
         child: GestureDetector(

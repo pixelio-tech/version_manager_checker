@@ -51,8 +51,12 @@ class ModalNotification extends StatelessWidget {
       // обязательного обновления (VmUpdateGate).
       barrierDismissible: true,
       barrierColor: payload.style.colors.overlay ?? const Color(0x73141821),
-      builder: (ctx) =>
-          ModalNotification(payload: payload, locale: locale, onButtonTap: onButtonTap, onDismiss: () => Navigator.of(ctx).pop()),
+      builder: (ctx) => ModalNotification(
+        payload: payload,
+        locale: locale,
+        onButtonTap: onButtonTap,
+        onDismiss: () => Navigator.of(ctx).pop(),
+      ),
     );
   }
 
@@ -70,7 +74,11 @@ class ModalNotification extends StatelessWidget {
         constraints: BoxConstraints(maxHeight: media.size.height * 0.8, maxWidth: style.maxWidth ?? double.infinity),
         child: Container(
           clipBehavior: Clip.antiAlias,
-          decoration: notificationCardDecoration(style, onSurface: true, radius: style.corners ?? BorderRadius.circular(radius)),
+          decoration: notificationCardDecoration(
+            style,
+            onSurface: true,
+            radius: style.corners ?? BorderRadius.circular(radius),
+          ),
           child: Stack(
             children: [
               // Column + Flexible: высота карточки считается по содержимому,

@@ -117,8 +117,8 @@ class VersionManager {
   final _flagChanges = StreamController<Map<String, Object?>>.broadcast();
   final Set<String> _flagTypeWarned = {};
 
-  /// Эксперименты, экспозиция которых уже отправлена в этом запуске:
-  /// `experiment()` зовут на каждом кадре, а серверу нужна только первая.
+  /// Тесты, экспозиция которых уже отправлена в этом запуске: параметры
+  /// читают на каждом кадре, а серверу нужна только первая.
   final Set<String> _exposed = {};
   final _failures = StreamController<Object>.broadcast();
 
@@ -170,13 +170,7 @@ class VersionManager {
     final it = VersionManager._(
       client:
           client ??
-          VmV3Client(
-            baseUrl: baseUrl,
-            apiKey: apiKey,
-            timeout: timeout,
-            maxRetries: maxRetries,
-            onLog: onLog,
-          ),
+          VmV3Client(baseUrl: baseUrl, apiKey: apiKey, timeout: timeout, maxRetries: maxRetries, onLog: onLog),
       namespace: namespace,
       version: version,
       buildNumber: buildNumber,
@@ -256,23 +250,23 @@ class VersionManager {
   /// final limit = vm.flag('upload_limit_mb', 50);
   /// ```
   ///
-  /// Если флаг подменён A/B экспериментом, первое чтение за запуск отмечает
-  /// экспозицию — как [experiment].
-  T flag<T>(String key, T defaultValue) {
-    final owner = _last?.experimentFlags[key];
-    if (owner != null) _expose(owner);
-    final raw = flags[key];
+  /// Флаги — выключатели фич. A/B тесты их не подменяют: у теста свои
+  /// параметры, см. [experiment].
+  T flag<T>(String key, T defaultValue) => _typed(flags[key], defaultValue, 'feature flag', key);
+
+  /// Значение нужного типа или [defaultValue]. Числа приводятся между int и
+  /// double; несовпадение типа — ошибка настройки, пишется в лог раз на ключ.
+  T _typed<T>(Object? raw, T defaultValue, String what, String key) {
     if (raw == null) return defaultValue;
     if (raw is T) return raw as T;
     if (raw is num) {
       if (defaultValue is double) return raw.toDouble() as T;
       if (defaultValue is int && raw == raw.roundToDouble()) return raw.toInt() as T;
     }
-    // Тип в админке не совпал с кодом — это ошибка настройки, её надо видеть.
-    // Один раз на ключ: flag() зовут на каждом кадре.
-    if (_flagTypeWarned.add(key)) {
+    // Один раз на ключ: читают на каждом кадре.
+    if (_flagTypeWarned.add('$what|$key')) {
       _log.warning(
-        'feature flag has an unexpected type, using the default',
+        '$what has an unexpected type, using the default',
         data: {'key': key, 'expected': '$T', 'got': raw.runtimeType.toString()},
       );
     }
@@ -282,33 +276,36 @@ class VersionManager {
   /// Короткая форма для булевых флагов.
   bool isEnabled(String key, {bool defaultValue = false}) => flag<bool>(key, defaultValue);
 
-  /// Варианты A/B экспериментов, в которые попало устройство (#54):
-  /// `{ключ эксперимента: ключ варианта}`. Экспозицию не отмечает — для
-  /// этого [experiment].
-  Map<String, String> get experiments => _last?.experiments ?? const {};
+  /// Варианты A/B тестов, в которые попало устройство:
+  /// `{ключ теста: ключ варианта}`. Экспозицию не отмечает — для этого
+  /// [experiment].
+  Map<String, String> get experiments => {
+    for (final e in (_last?.experiments ?? const <String, VmAssignment>{}).entries) e.key: e.value.variant,
+  };
 
-  /// Вариант эксперимента [key] или `null`, если устройство в него не попало
-  /// (не подошло под аудиторию, эксперимент не запущен или сервер ещё не
-  /// отвечал). `null` значит «вести себя как обычно», то есть как контроль.
-  ///
-  /// Первое чтение варианта за запуск отправляет экспозицию: так отчёт
-  /// отличает тех, кто дошёл до экрана с экспериментом, от всех назначенных.
-  /// Зовите там, где вариант действительно влияет на то, что видит человек.
+  /// A/B тест [key] (version_manager_back#54, #66). Тест не связан с флагами:
+  /// у него свои параметры, их значения задаёт вариант устройства.
   ///
   /// ```dart
-  /// final variant = vm.experiment('paywall_layout');
-  /// return variant == 'compact' ? const CompactPaywall() : const Paywall();
+  /// final paywall = vm.experiment('paywall_design_test');
+  /// final layout = paywall.getString('layout', 'classic');
+  /// final trialDays = paywall.getInt('trial_days', 3);
   /// ```
   ///
-  /// Флаговый эксперимент уже подменил значение флага — [flag] вернёт
-  /// значение варианта и сам отметит экспозицию.
-  String? experiment(String key) {
-    final variant = experiments[key];
-    if (variant != null) _expose(key);
-    return variant;
-  }
+  /// Устройство не в тесте (не подошло, тест не запущен, на паузе, сервер ещё
+  /// не отвечал) — [VmExperiment.variant] равен `null`, а `get…` отдают
+  /// значения по умолчанию из кода. Значения по умолчанию в коде должны быть
+  /// значениями контроля.
+  ///
+  /// Первое чтение варианта или параметра за запуск отправляет экспозицию:
+  /// так отчёт отличает тех, кто дошёл до экрана с тестом, от всех
+  /// назначенных. Зовите `get…` там, где значение действительно влияет на
+  /// то, что видит человек. Выкаченный тест экспозицию не шлёт.
+  VmExperiment experiment(String key) => VmExperiment._(this, key);
 
   void _expose(String experimentKey) {
+    final a = _last?.experiments[experimentKey];
+    if (a == null || a.shipped) return;
     if (!_exposed.add(experimentKey)) return;
     unawaited(client.recordExposure(experimentKey: experimentKey, instanceId: instanceId));
   }
@@ -570,13 +567,7 @@ class VersionManager {
       // Показ обёрнут по одному: кривое оформление, пришедшее из админки,
       // должно гасить себя, а не остальные сообщения и не экран вокруг.
       try {
-        await _present(
-          context,
-          n,
-          onAction: onAction,
-          onLocalPush: onLocalPush,
-          bannerDuration: bannerDuration,
-        );
+        await _present(context, n, onAction: onAction, onLocalPush: onLocalPush, bannerDuration: bannerDuration);
       } catch (e, st) {
         _log.error('notification was not shown', error: e, stackTrace: st, data: {'type': n.type});
       }
@@ -601,10 +592,8 @@ class VersionManager {
       // Пустая карточка не показывается: под ней осталось бы одно затемнение,
       // и экран выглядел бы зависшим. Сообщение, у которого нечего рисовать, —
       // ошибка в админке, поэтому её видно в логе.
-      onEmpty: (p) => _log.warning(
-        'notification has nothing to draw and was skipped',
-        data: {'id': p.id, 'type': p.type},
-      ),
+      onEmpty: (p) =>
+          _log.warning('notification has nothing to draw and was skipped', data: {'id': p.id, 'type': p.type}),
     );
     // Модалка и шторка перекрывают друг друга, поэтому следующий показ
     // ждёт, пока пользователь закроет предыдущий.
@@ -642,5 +631,61 @@ class VersionManager {
     _flagChanges.close();
     client.close();
     if (identical(_instance, this)) _instance = null;
+  }
+}
+
+/// A/B тест с точки зрения приложения: вариант и параметры устройства.
+/// Получается через [VersionManager.experiment]; дёшев, держать не нужно.
+class VmExperiment {
+  VmExperiment._(this._vm, this.key);
+
+  final VersionManager _vm;
+
+  /// Ключ теста, как в админке.
+  final String key;
+
+  VmAssignment? get _assignment => _vm._last?.experiments[key];
+
+  /// Устройство участвует в тесте (или получает выкаченного победителя).
+  /// Экспозицию не отмечает.
+  bool get isActive => _assignment != null;
+
+  /// Победитель выкачен: значения больше не делятся по вариантам.
+  bool get isShipped => _assignment?.shipped ?? false;
+
+  /// Ключ варианта или `null`, если устройство не в тесте. Отмечает
+  /// экспозицию.
+  String? get variant {
+    final a = _assignment;
+    if (a == null) return null;
+    _vm._expose(key);
+    return a.variant;
+  }
+
+  /// Параметр [param] нужного типа или [defaultValue]. Отмечает экспозицию,
+  /// если устройство в тесте.
+  T get<T>(String param, T defaultValue) {
+    final a = _assignment;
+    if (a == null) return defaultValue;
+    _vm._expose(key);
+    return _vm._typed(a.params[param], defaultValue, 'experiment param', '$key.$param');
+  }
+
+  bool getBool(String param, bool defaultValue) => get<bool>(param, defaultValue);
+  int getInt(String param, int defaultValue) => get<int>(param, defaultValue);
+  double getDouble(String param, double defaultValue) => get<double>(param, defaultValue);
+  num getNum(String param, num defaultValue) => get<num>(param, defaultValue);
+  String getString(String param, String defaultValue) => get<String>(param, defaultValue);
+
+  /// JSON-параметр: объект или список, как пришёл с сервера.
+  Map<String, Object?> getJson(String param, Map<String, Object?> defaultValue) {
+    final raw = get<Object?>(param, null);
+    return raw is Map ? Map<String, Object?>.from(raw) : defaultValue;
+  }
+
+  /// Отметить экспозицию вручную — когда значения читаются заранее, а экран
+  /// с тестом показывается позже.
+  void logExposure() {
+    if (_assignment != null) _vm._expose(key);
   }
 }

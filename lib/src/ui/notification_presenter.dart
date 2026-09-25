@@ -33,6 +33,7 @@ void presentVmNotification(
   required VmNotificationAction onAction,
   VmNotificationEvent? onEvent,
   void Function(NotificationPayload payload)? onLocalPush,
+
   /// Вызывается вместо показа, когда в оформлении не осталось ни одного узла.
   void Function(NotificationPayload payload)? onEmpty,
   Duration bannerDuration = const Duration(seconds: 5),

@@ -193,7 +193,11 @@ void main() {
     // Запирать интерфейс имеет право только блокировка версии.
     expect(vmVerdictFor(maintenance), VmGateVerdict.pass);
 
-    await tester.pumpWidget(MaterialApp(home: VmMaintenanceScreen(result: maintenance, onRetry: () {})));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: VmMaintenanceScreen(result: maintenance, onRetry: () {}),
+      ),
+    );
     expect(find.text('Идут технические работы'), findsOneWidget);
     expect(find.text('Вернёмся через час'), findsOneWidget);
     expect(find.text('Проверить ещё раз'), findsOneWidget);
@@ -202,7 +206,9 @@ void main() {
   testWidgets('длинное содержимое прокручивается, а не переполняет карточку', (tester) async {
     final payload = _payload(
       type: 'modal',
-      blocks: [for (var i = 0; i < 40; i++) _text('t$i', 'Строка $i, довольно длинная, чтобы карточка не влезла в экран')],
+      blocks: [
+        for (var i = 0; i < 40; i++) _text('t$i', 'Строка $i, довольно длинная, чтобы карточка не влезла в экран'),
+      ],
     );
     await _show(tester, payload);
 

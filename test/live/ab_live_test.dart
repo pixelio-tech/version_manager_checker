@@ -2,10 +2,11 @@
 // checker#12).
 //
 // Юнит-тесты SDK ходят в MockClient и контракт с сервером не проверяют:
-// переименуй сервер поле experimentFlags или формат occurredAt, тесты
+// поменяй сервер форму `experiments` или формат occurredAt, тесты
 // останутся зелёными, а отчёт A/B в проде — пустым. Здесь настоящий
-// VersionManager проходит путь приложения: проверка версии → флаг под
-// экспериментом → экспозиция → покупка в очереди событий → отчёт на сервере.
+// VersionManager проходит путь приложения: проверка версии → параметр теста →
+// экспозиция → покупка в очереди событий → отчёт на сервере. Флаг рядом —
+// чтобы видеть, что тест его не трогает (#66).
 //
 // Нужен бэкенд в режиме development (регистрация по devCode):
 //
@@ -54,7 +55,7 @@ class _Admin {
 
 void main() {
   test(
-    'флаг под A/B тестом: вариант, экспозиция и покупка доезжают до отчёта',
+    'A/B тест с параметрами: вариант, экспозиция и покупка доезжают до отчёта, флаг не тронут',
     () async {
       final admin = await _Admin.register();
       final stamp = DateTime.now().microsecondsSinceEpoch;
@@ -68,23 +69,29 @@ void main() {
       final envId = (envs['items'] as List).first['id'] as String;
       final key = (await admin.call('GET', '/apps/$appId/environments/$envId/key'))['key'] as String;
 
-      final flag = await admin.call('POST', '/flags?application_id=$appId', {
+      await admin.call('POST', '/flags?application_id=$appId', {
         'key': 'paywall',
         'type': 'string',
-        'defaultValue': 'classic',
+        'defaultValue': 'legacy',
       });
       final exp = await admin.call('POST', '/experiments?application_id=$appId', {
         'key': 'paywall_v2',
         'name': 'Пейвол',
-        'kind': 'flag',
-        'flagId': flag['id'],
+        'params': [
+          {'key': 'layout', 'type': 'string', 'default': 'classic'},
+          {'key': 'trial_days', 'type': 'number', 'default': 3},
+        ],
         'metrics': [
           {'kind': 'event', 'eventName': 'purchase', 'role': 'primary'},
           {'kind': 'event', 'eventName': 'purchase', 'aggregate': 'sum', 'role': 'secondary'},
         ],
         'variants': [
-          {'key': 'control', 'weight': 50, 'value': 'classic'},
-          {'key': 'compact', 'weight': 50, 'value': 'compact'},
+          {'key': 'control', 'weight': 50},
+          {
+            'key': 'compact',
+            'weight': 50,
+            'params': {'layout': 'compact', 'trial_days': 7},
+          },
         ],
       });
       final expId = exp['id'] as String;
@@ -106,15 +113,18 @@ void main() {
           maxRetries: 0,
         );
         // До ответа сервера — значение из кода, вне теста.
-        expect(vm.flag('paywall', 'classic'), 'classic');
-        expect(vm.experiment('paywall_v2'), isNull);
+        expect(vm.experiment('paywall_v2').getString('layout', 'classic'), 'classic');
+        expect(vm.experiment('paywall_v2').variant, isNull);
 
         await vm.check();
         final variant = vm.experiments['paywall_v2'];
         expect(variant, isIn(['control', 'compact']), reason: 'установка $i не попала в тест со 100% аудитории');
         assigned[variant!] = assigned[variant]! + 1;
-        // Экран пейвола читает флаг — не вариант. SDK сам отмечает экспозицию.
-        expect(vm.flag('paywall', 'classic'), variant == 'compact' ? 'compact' : 'classic');
+        // Экран пейвола читает параметры теста — SDK сам отмечает экспозицию.
+        final paywall = vm.experiment('paywall_v2');
+        expect(paywall.getString('layout', 'classic'), variant == 'compact' ? 'compact' : 'classic');
+        expect(paywall.getInt('trial_days', 3), variant == 'compact' ? 7 : 3);
+        expect(vm.flag('paywall', 'none'), 'legacy', reason: 'тест не подменяет флаг');
 
         if (i.isEven) {
           expect(vm.track('purchase', value: 4.99), isTrue);
@@ -132,7 +142,7 @@ void main() {
       for (final v in primary.cast<Map<String, dynamic>>()) {
         final k = v['key'] as String;
         expect(v['assigned'], assigned[k], reason: '$k: назначено');
-        expect(v['exposed'], assigned[k], reason: '$k: экспозиция от vm.flag не дошла');
+        expect(v['exposed'], assigned[k], reason: '$k: экспозиция от чтения параметра не дошла');
         expect(v['conversions'], bought[k], reason: '$k: покупки из очереди SDK не засчитаны');
       }
       final revenue = (rep['metrics'] as List)[1]['variants'] as List;
@@ -140,7 +150,11 @@ void main() {
         final k = v['key'] as String;
         final n = assigned[k]!;
         if (n == 0) continue;
-        expect((v['value'] as num).toDouble(), closeTo(bought[k]! * 4.99 / n, 1e-6), reason: '$k: выручка на участника');
+        expect(
+          (v['value'] as num).toDouble(),
+          closeTo(bought[k]! * 4.99 / n, 1e-6),
+          reason: '$k: выручка на участника',
+        );
       }
 
       // Подсказка событий в админке видит то, что прислал SDK.
