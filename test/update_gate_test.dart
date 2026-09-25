@@ -12,7 +12,6 @@ CheckResult _result({String status = 'active', bool blocked = false, String prio
         'versionNumber': '4.2.0',
         'buildNumber': 420,
         'changelog': 'Починили синхронизацию',
-        'frequency': 'once',
         'storeLinks': withStore
             ? [
                 {'platform': 'ios', 'storeName': 'App Store', 'url': 'https://apps.apple.com/app/id1'},

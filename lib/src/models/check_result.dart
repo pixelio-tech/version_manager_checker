@@ -7,7 +7,11 @@ class CheckResult {
   final bool isBlocked;
   final String? blockReason;
   final String updatePriority;
-  final RecommendedVersion? recommendedVersion;
+
+  /// Куда обновляться: приходит только вместе с блокировкой, для экрана
+  /// обязательного обновления ([VmBlockedScreen]). Мягкое «доступно
+  /// обновление» сервер присылает уведомлением, а не этим полем.
+  final UpdateTarget? updateTarget;
   final List<NotificationPayload> notifications;
   final int nextCheckInterval;
   final String configHash;
@@ -19,7 +23,7 @@ class CheckResult {
     required this.isBlocked,
     this.blockReason,
     required this.updatePriority,
-    this.recommendedVersion,
+    this.updateTarget,
     required this.notifications,
     required this.nextCheckInterval,
     required this.configHash,
@@ -32,8 +36,9 @@ class CheckResult {
     isBlocked: json['isBlocked'] as bool? ?? false,
     blockReason: json['blockReason'] as String?,
     updatePriority: json['updatePriority'] as String? ?? 'none',
-    recommendedVersion: json['recommendedVersion'] != null
-        ? RecommendedVersion.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
+    // Имя поля в ответе старше модели: по нему ходят и старые сборки SDK.
+    updateTarget: json['recommendedVersion'] != null
+        ? UpdateTarget.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
         : null,
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
@@ -46,41 +51,26 @@ class CheckResult {
   );
 }
 
-class RecommendedVersion {
+/// Цель обязательного обновления: актуальная сборка платформы, ссылки на
+/// стор и заметка к релизу.
+class UpdateTarget {
   final String versionNumber;
   final int buildNumber;
   final List<StoreLink> storeLinks;
   final String changelog;
 
-  /// Как часто напоминать: every_launch | one_time | every_nth | every_x_hours.
-  /// Считает это клиент — сервер видит проверки, а не запуски приложения.
-  /// Применяет [VersionManager.shouldRemindAboutUpdate].
-  final String frequency;
-
-  /// Параметр режима `every_nth` — показывать на каждом N-м запуске.
-  final int? everyNth;
-
-  /// Параметр режима `every_x_hours` — не чаще раза в N часов.
-  final int? periodHours;
-
-  const RecommendedVersion({
+  const UpdateTarget({
     required this.versionNumber,
     required this.buildNumber,
     required this.storeLinks,
     required this.changelog,
-    required this.frequency,
-    this.everyNth,
-    this.periodHours,
   });
 
-  factory RecommendedVersion.fromJson(Map<String, dynamic> json) => RecommendedVersion(
+  factory UpdateTarget.fromJson(Map<String, dynamic> json) => UpdateTarget(
     versionNumber: json['versionNumber'] as String,
     buildNumber: (json['buildNumber'] as num).toInt(),
     storeLinks: (json['storeLinks'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().map(StoreLink.fromJson).toList(),
     changelog: json['changelog'] as String? ?? '',
-    frequency: json['frequency'] as String? ?? 'every_launch',
-    everyNth: (json['everyNth'] as num?)?.toInt(),
-    periodHours: (json['periodHours'] as num?)?.toInt(),
   );
 }
 

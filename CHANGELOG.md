@@ -1,3 +1,19 @@
+## 0.6.0
+
+**Ломающее.** Рекомендации версий убраны — на сервере их больше нет
+(pixelio-tech/version_manager_back#48). Мягкое «доступно обновление»
+приходит обычным уведомлением с показом «Есть обновление» и рисуется
+`presentAll`.
+
+- Удалены `shouldRemindAboutUpdate()`, `markUpdateReminderShown()`,
+  `vmShouldRemind` и `VmReminderState`: частоту теперь задаёт показ
+  уведомления (лимит показов, интервал), и считает её сервер.
+- `RecommendedVersion` → `UpdateTarget`, поле `CheckResult.recommendedVersion`
+  → `CheckResult.updateTarget`. Режима и его параметров (`frequency`,
+  `everyNth`, `periodHours`) у него нет. Приходит только при блокировке —
+  по нему `VmBlockedScreen` находит ссылку на стор.
+- `launchCount` остался: счётчик запусков по-прежнему растёт раз за `init()`.
+
 ## 0.5.0
 
 **Ломающее.** Тип `silent` убран. Он задумывался как команда приложению, но

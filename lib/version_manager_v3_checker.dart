@@ -12,7 +12,6 @@ library;
 export 'src/client.dart';
 export 'src/models/check_result.dart';
 export 'src/outcome.dart';
-export 'src/reminder.dart';
 export 'src/models/notification_blocks.dart';
 export 'src/models/notification_style.dart';
 export 'src/storage.dart';

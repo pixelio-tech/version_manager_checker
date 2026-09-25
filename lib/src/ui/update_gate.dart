@@ -55,7 +55,7 @@ class VmBlockedScreen extends StatelessWidget {
   });
 
   StoreLink? get _link {
-    final links = result.recommendedVersion?.storeLinks ?? const <StoreLink>[];
+    final links = result.updateTarget?.storeLinks ?? const <StoreLink>[];
     if (links.isEmpty) return null;
     for (final l in links) {
       if (l.platform == platform) return l;
@@ -93,17 +93,17 @@ class VmBlockedScreen extends StatelessWidget {
                   Text(head, textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
                   const SizedBox(height: 10),
                   Text(text, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-                  if (result.recommendedVersion != null) ...[
+                  if (result.updateTarget != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Актуальная версия ${result.recommendedVersion!.versionNumber}',
+                      'Актуальная версия ${result.updateTarget!.versionNumber}',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
-                  if (result.recommendedVersion?.changelog.trim().isNotEmpty == true) ...[
+                  if (result.updateTarget?.changelog.trim().isNotEmpty == true) ...[
                     const SizedBox(height: 16),
-                    Text(result.recommendedVersion!.changelog, style: theme.textTheme.bodySmall),
+                    Text(result.updateTarget!.changelog, style: theme.textTheme.bodySmall),
                   ],
                   const SizedBox(height: 24),
                   if (link != null)

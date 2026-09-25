@@ -13,7 +13,6 @@ void main() {
         'versionNumber': '4.2.0',
         'buildNumber': 420,
         'changelog': 'Правки',
-        'frequency': 'once',
         'storeLinks': [
           {'platform': 'ios', 'storeName': 'App Store', 'url': 'https://apps.apple.com/app/id1'},
         ],
@@ -41,7 +40,7 @@ void main() {
     });
 
     expect(result.status, 'update_available');
-    expect(result.recommendedVersion!.storeLinks.single.storeName, 'App Store');
+    expect(result.updateTarget!.storeLinks.single.storeName, 'App Store');
     expect(result.notifications.single.style.cornerRadius, 40);
     expect(result.notifications.single.style.position, NotificationPosition.bottom);
     expect(result.nextCheckInterval, 900);

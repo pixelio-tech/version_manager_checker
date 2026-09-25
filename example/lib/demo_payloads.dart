@@ -168,7 +168,6 @@ CheckResult demoBlockedResult({required bool blocked}) => CheckResult.fromJson({
     'versionNumber': '4.2.0',
     'buildNumber': 420,
     'changelog': 'Быстрее лента, починили синхронизацию.',
-    'frequency': 'once',
     'storeLinks': [
       {'platform': 'ios', 'storeName': 'App Store', 'url': 'https://apps.apple.com/app/id0000000000'},
       {'platform': 'android', 'storeName': 'Google Play', 'url': 'https://play.google.com/store/apps/details?id=com.example'},
