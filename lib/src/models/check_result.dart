@@ -23,6 +23,10 @@ class CheckResult {
   /// `{ключ эксперимента: ключ варианта}` (version_manager_back#54). Читать
   /// удобнее через [VersionManager.experiment] — он же отмечает экспозицию.
   final Map<String, String> experiments;
+
+  /// Какой флаг подменён каким экспериментом: `{ключ флага: ключ
+  /// эксперимента}`. По нему [VersionManager.flag] отмечает экспозицию.
+  final Map<String, String> experimentFlags;
   final int nextCheckInterval;
   final String configHash;
   final String message;
@@ -37,6 +41,7 @@ class CheckResult {
     required this.notifications,
     this.flags = const {},
     this.experiments = const {},
+    this.experimentFlags = const {},
     required this.nextCheckInterval,
     required this.configHash,
     required this.message,
@@ -53,12 +58,8 @@ class CheckResult {
         ? UpdateTarget.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
         : null,
     flags: json['flags'] is Map ? Map<String, Object?>.unmodifiable(json['flags'] as Map) : const {},
-    experiments: json['experiments'] is Map
-        ? Map<String, String>.unmodifiable({
-            for (final e in (json['experiments'] as Map).entries)
-              if (e.key is String && e.value is String) e.key as String: e.value as String,
-          })
-        : const {},
+    experiments: _stringMap(json['experiments']),
+    experimentFlags: _stringMap(json['experimentFlags']),
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(NotificationPayload.fromJson)
@@ -136,3 +137,11 @@ class NotificationPayload {
         : const NotificationStyle(),
   );
 }
+
+/// `{строка: строка}` из JSON; всё прочее отбрасывается.
+Map<String, String> _stringMap(Object? raw) => raw is Map
+    ? Map<String, String>.unmodifiable({
+        for (final e in raw.entries)
+          if (e.key is String && e.value is String) e.key as String: e.value as String,
+      })
+    : const {};

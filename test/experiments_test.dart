@@ -91,6 +91,25 @@ void main() {
     second.dispose();
   });
 
+  test('чтение флага под экспериментом отмечает экспозицию', () async {
+    final s = _server({
+      ..._body(experiments: {'checkout': 'green'}, flags: {'button_color': 'green', 'plain': true}),
+      'experimentFlags': {'button_color': 'checkout'},
+    });
+    final vm = await _manager(s.client);
+    await vm.check();
+    expect(vm.flag('plain', false), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(s.exposures, isEmpty, reason: 'флаг вне эксперимента экспозицию не шлёт');
+
+    expect(vm.flag('button_color', 'blue'), 'green');
+    expect(vm.flag('button_color', 'blue'), 'green');
+    expect(vm.experiment('checkout'), 'green');
+    await Future<void>.delayed(Duration.zero);
+    expect(s.exposures.map((e) => e['experimentKey']), ['checkout'], reason: 'одна экспозиция на эксперимент за запуск');
+    vm.dispose();
+  });
+
   test('разбор: без поля и с мусором — пустой набор', () {
     expect(CheckResult.fromJson(_body()).experiments, isEmpty);
     final r = CheckResult.fromJson(_body(experiments: {'ok': 'b', 'bad': 5}));

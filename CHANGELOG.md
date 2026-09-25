@@ -5,7 +5,10 @@
   чтении за запуск отправляет экспозицию (`POST /experiment-exposure`).
   `vm.experiments` — все варианты без экспозиции. Варианты едут в
   сохранённом конфиге вместе с флагами.
-- `CheckResult.experiments`, `VmV3Client.recordExposure`. Экспозиция не
+- Флаг, подменённый экспериментом, отмечает экспозицию при чтении через
+  `vm.flag(...)` — сервер присылает привязку в `experimentFlags`.
+- `CheckResult.experiments`, `CheckResult.experimentFlags`,
+  `VmV3Client.recordExposure`. Экспозиция не
   бросает: любой отказ — строка в логе.
 
 ## 0.7.0

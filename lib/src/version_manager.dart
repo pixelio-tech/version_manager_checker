@@ -246,7 +246,12 @@ class VersionManager {
   /// if (vm.flag('new_checkout', false)) { ... }
   /// final limit = vm.flag('upload_limit_mb', 50);
   /// ```
+  ///
+  /// Если флаг подменён A/B экспериментом, первое чтение за запуск отмечает
+  /// экспозицию — как [experiment].
   T flag<T>(String key, T defaultValue) {
+    final owner = _last?.experimentFlags[key];
+    if (owner != null) _expose(owner);
     final raw = flags[key];
     if (raw == null) return defaultValue;
     if (raw is T) return raw as T;
@@ -287,13 +292,16 @@ class VersionManager {
   /// ```
   ///
   /// Флаговый эксперимент уже подменил значение флага — [flag] вернёт
-  /// значение варианта и без этого вызова.
+  /// значение варианта и сам отметит экспозицию.
   String? experiment(String key) {
     final variant = experiments[key];
-    if (variant != null && _exposed.add(key)) {
-      unawaited(client.recordExposure(experimentKey: key, instanceId: instanceId));
-    }
+    if (variant != null) _expose(key);
     return variant;
+  }
+
+  void _expose(String experimentKey) {
+    if (!_exposed.add(experimentKey)) return;
+    unawaited(client.recordExposure(experimentKey: experimentKey, instanceId: instanceId));
   }
 
   /// Каждая неудавшаяся проверка. Подписка не обязательна: пакет уже пишет их
