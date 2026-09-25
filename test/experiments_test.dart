@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -135,6 +136,33 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(s.exposures, hasLength(1));
     vm.dispose();
+  });
+
+  test('экспозиция переживает сбой сети и перезапуск (checker#16)', () async {
+    final storage = VmMemoryStorage();
+    final body = _body(experiments: {'paywall': _a('compact', {'layout': 'compact'})});
+    // Проверка проходит, а экспозиция — нет: человек увидел пейвол и закрыл
+    // приложение, пока запрос шёл.
+    var exposureTries = 0;
+    final flaky = MockClient((req) async {
+      if (req.url.path.endsWith('/experiment-exposure')) {
+        exposureTries++;
+        throw const SocketException('нет сети');
+      }
+      return http.Response.bytes(utf8.encode(jsonEncode(body)), 200, headers: {'etag': 'h', 'content-type': 'application/json; charset=utf-8'});
+    });
+    final first = await _manager(flaky, storage: storage);
+    await first.check();
+    expect(first.experiment('paywall').getString('layout', 'classic'), 'compact');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(exposureTries, 1);
+    first.dispose();
+
+    final s = _server(body);
+    final second = await _manager(s.client, storage: storage);
+    await second.flushEvents();
+    expect(s.exposures.map((e) => e['experimentKey']), ['paywall'], reason: 'экспозиция из очереди прошлого запуска');
+    second.dispose();
   });
 
   test('варианты и параметры переживают перезапуск вместе с сохранённым конфигом', () async {

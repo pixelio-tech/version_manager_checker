@@ -82,6 +82,17 @@ class VmEventQueue {
     return true;
   }
 
+  /// Ставит в очередь экспозицию A/B теста [experimentKey] и сразу пробует
+  /// отправить. Через очередь — чтобы экспозиция, как и события, переживала
+  /// закрытие приложения и сбой сети: одиночный запрос терялся, если человек
+  /// уходил с экрана теста раньше, чем он доезжал (checker#16).
+  void addExposure(String experimentKey) {
+    _queue.add({'exposure': experimentKey});
+    _trim();
+    _save();
+    unawaited(flush());
+  }
+
   void _trim() {
     if (_queue.length <= maxQueued) return;
     _queue.removeRange(0, _queue.length - maxQueued);
@@ -104,12 +115,22 @@ class VmEventQueue {
 
   Future<void> _flush() async {
     while (_queue.isNotEmpty) {
-      final batch = _queue.take(batchSize).toList();
-      final result = await client.sendEvents(instanceId: instanceId(), events: batch);
+      final exposure = _queue.first['exposure'];
+      final int taken;
+      final VmSendResult result;
+      if (exposure is String) {
+        taken = 1;
+        result = await client.recordExposure(experimentKey: exposure, instanceId: instanceId());
+      } else {
+        // Пачка — подряд идущие события до первой экспозиции.
+        final batch = _queue.take(batchSize).takeWhile((e) => e['exposure'] == null).toList();
+        taken = batch.length;
+        result = await client.sendEvents(instanceId: instanceId(), events: batch);
+      }
       if (result == VmSendResult.retry) break;
       // Отправлено или отвергнуто — из очереди в любом случае: отвергнутое
       // повтор не исправит.
-      _queue.removeRange(0, batch.length);
+      _queue.removeRange(0, taken);
       _save();
     }
     await _saving;
