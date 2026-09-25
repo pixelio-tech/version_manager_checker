@@ -19,14 +19,11 @@ class CheckResult {
   /// значение по умолчанию.
   final Map<String, Object?> flags;
 
-  /// Варианты A/B экспериментов, в которые попало устройство:
-  /// `{ключ эксперимента: ключ варианта}` (version_manager_back#54). Читать
-  /// удобнее через [VersionManager.experiment] — он же отмечает экспозицию.
-  final Map<String, String> experiments;
-
-  /// Какой флаг подменён каким экспериментом: `{ключ флага: ключ
-  /// эксперимента}`. По нему [VersionManager.flag] отмечает экспозицию.
-  final Map<String, String> experimentFlags;
+  /// A/B тесты, в которые попало устройство: `{ключ теста: назначение}`
+  /// (version_manager_back#54, #66). Тесты не связаны с [flags]: у теста
+  /// свои параметры. Читать удобнее через [VersionManager.experiment] — он
+  /// же отмечает экспозицию.
+  final Map<String, VmAssignment> experiments;
   final int nextCheckInterval;
   final String configHash;
   final String message;
@@ -41,7 +38,6 @@ class CheckResult {
     required this.notifications,
     this.flags = const {},
     this.experiments = const {},
-    this.experimentFlags = const {},
     required this.nextCheckInterval,
     required this.configHash,
     required this.message,
@@ -58,8 +54,7 @@ class CheckResult {
         ? UpdateTarget.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
         : null,
     flags: json['flags'] is Map ? Map<String, Object?>.unmodifiable(json['flags'] as Map) : const {},
-    experiments: _stringMap(json['experiments']),
-    experimentFlags: _stringMap(json['experimentFlags']),
+    experiments: _assignments(json['experiments']),
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(NotificationPayload.fromJson)
@@ -89,7 +84,10 @@ class UpdateTarget {
   factory UpdateTarget.fromJson(Map<String, dynamic> json) => UpdateTarget(
     versionNumber: json['versionNumber'] as String,
     buildNumber: (json['buildNumber'] as num).toInt(),
-    storeLinks: (json['storeLinks'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>().map(StoreLink.fromJson).toList(),
+    storeLinks: (json['storeLinks'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(StoreLink.fromJson)
+        .toList(),
     changelog: json['changelog'] as String? ?? '',
   );
 }
@@ -101,8 +99,11 @@ class StoreLink {
 
   const StoreLink({required this.platform, required this.storeName, required this.url});
 
-  factory StoreLink.fromJson(Map<String, dynamic> json) =>
-      StoreLink(platform: json['platform'] as String, storeName: json['storeName'] as String, url: json['url'] as String);
+  factory StoreLink.fromJson(Map<String, dynamic> json) => StoreLink(
+    platform: json['platform'] as String,
+    storeName: json['storeName'] as String,
+    url: json['url'] as String,
+  );
 }
 
 /// One delivered, localized notification — content + presentation style +
@@ -138,10 +139,39 @@ class NotificationPayload {
   );
 }
 
-/// `{строка: строка}` из JSON; всё прочее отбрасывается.
-Map<String, String> _stringMap(Object? raw) => raw is Map
-    ? Map<String, String>.unmodifiable({
-        for (final e in raw.entries)
-          if (e.key is String && e.value is String) e.key as String: e.value as String,
-      })
-    : const {};
+/// Разбор `experiments`. Строка вместо объекта — ответ сервера до #66
+/// (сохранённый конфиг старой сборки): вариант без параметров.
+Map<String, VmAssignment> _assignments(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, VmAssignment>{};
+  for (final e in raw.entries) {
+    final key = e.key;
+    final v = e.value;
+    if (key is! String) continue;
+    if (v is String) {
+      out[key] = VmAssignment(variant: v);
+    } else if (v is Map && v['variant'] is String) {
+      out[key] = VmAssignment(
+        variant: v['variant'] as String,
+        params: v['params'] is Map ? Map<String, Object?>.unmodifiable(v['params'] as Map) : const {},
+        shipped: v['shipped'] == true,
+      );
+    }
+  }
+  return Map.unmodifiable(out);
+}
+
+/// Назначение устройства в A/B тесте: вариант и значения параметров.
+class VmAssignment {
+  /// Ключ варианта; первый вариант теста — контроль.
+  final String variant;
+
+  /// Все параметры теста для этого варианта: заданные вариантом поверх
+  /// значений по умолчанию из админки.
+  final Map<String, Object?> params;
+
+  /// Победитель выкачен: тест закончен, экспозиция не отправляется.
+  final bool shipped;
+
+  const VmAssignment({required this.variant, this.params = const {}, this.shipped = false});
+}
