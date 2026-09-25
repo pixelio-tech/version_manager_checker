@@ -1,3 +1,17 @@
+## 0.10.0
+
+- **A/B тесты отдельно от флагов** (version_manager_back#66). Ломающее
+  изменение. `vm.experiment(key)` теперь отдаёт `VmExperiment`: `variant`,
+  `getBool/getInt/getDouble/getNum/getString/getJson(param, default)`,
+  `get<T>`, `isActive`, `isShipped`, `logExposure()`. Параметры теста задаются
+  в админке, значения — у варианта. Экспозиция — при первом чтении варианта
+  или параметра за запуск; у выкаченного теста не отправляется.
+- `vm.flag(...)` больше не отмечает экспозицию: тесты не подменяют флаги.
+  `CheckResult.experimentFlags` удалён, `CheckResult.experiments` —
+  `Map<String, VmAssignment>` (`variant`, `params`, `shipped`). Сохранённый
+  конфиг прежнего формата читается: вариант без параметров.
+- `vm.experiments` по-прежнему `{тест: вариант}` без экспозиции.
+
 ## 0.9.0
 
 - **События для целей A/B тестов** (version_manager_back#58).
