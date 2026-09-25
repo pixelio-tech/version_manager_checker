@@ -18,6 +18,11 @@ class CheckResult {
   /// Читать удобнее через [VersionManager.flag] — там приведение типа и
   /// значение по умолчанию.
   final Map<String, Object?> flags;
+
+  /// Варианты A/B экспериментов, в которые попало устройство:
+  /// `{ключ эксперимента: ключ варианта}` (version_manager_back#54). Читать
+  /// удобнее через [VersionManager.experiment] — он же отмечает экспозицию.
+  final Map<String, String> experiments;
   final int nextCheckInterval;
   final String configHash;
   final String message;
@@ -31,6 +36,7 @@ class CheckResult {
     this.updateTarget,
     required this.notifications,
     this.flags = const {},
+    this.experiments = const {},
     required this.nextCheckInterval,
     required this.configHash,
     required this.message,
@@ -47,6 +53,12 @@ class CheckResult {
         ? UpdateTarget.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
         : null,
     flags: json['flags'] is Map ? Map<String, Object?>.unmodifiable(json['flags'] as Map) : const {},
+    experiments: json['experiments'] is Map
+        ? Map<String, String>.unmodifiable({
+            for (final e in (json['experiments'] as Map).entries)
+              if (e.key is String && e.value is String) e.key as String: e.value as String,
+          })
+        : const {},
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(NotificationPayload.fromJson)

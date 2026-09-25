@@ -110,6 +110,10 @@ class VersionManager {
   final _results = StreamController<CheckResult>.broadcast();
   final _flagChanges = StreamController<Map<String, Object?>>.broadcast();
   final Set<String> _flagTypeWarned = {};
+
+  /// Эксперименты, экспозиция которых уже отправлена в этом запуске:
+  /// `experiment()` зовут на каждом кадре, а серверу нужна только первая.
+  final Set<String> _exposed = {};
   final _failures = StreamController<Object>.broadcast();
 
   VersionManager._({
@@ -263,6 +267,34 @@ class VersionManager {
 
   /// Короткая форма для булевых флагов.
   bool isEnabled(String key, {bool defaultValue = false}) => flag<bool>(key, defaultValue);
+
+  /// Варианты A/B экспериментов, в которые попало устройство (#54):
+  /// `{ключ эксперимента: ключ варианта}`. Экспозицию не отмечает — для
+  /// этого [experiment].
+  Map<String, String> get experiments => _last?.experiments ?? const {};
+
+  /// Вариант эксперимента [key] или `null`, если устройство в него не попало
+  /// (не подошло под аудиторию, эксперимент не запущен или сервер ещё не
+  /// отвечал). `null` значит «вести себя как обычно», то есть как контроль.
+  ///
+  /// Первое чтение варианта за запуск отправляет экспозицию: так отчёт
+  /// отличает тех, кто дошёл до экрана с экспериментом, от всех назначенных.
+  /// Зовите там, где вариант действительно влияет на то, что видит человек.
+  ///
+  /// ```dart
+  /// final variant = vm.experiment('paywall_layout');
+  /// return variant == 'compact' ? const CompactPaywall() : const Paywall();
+  /// ```
+  ///
+  /// Флаговый эксперимент уже подменил значение флага — [flag] вернёт
+  /// значение варианта и без этого вызова.
+  String? experiment(String key) {
+    final variant = experiments[key];
+    if (variant != null && _exposed.add(key)) {
+      unawaited(client.recordExposure(experimentKey: key, instanceId: instanceId));
+    }
+    return variant;
+  }
 
   /// Каждая неудавшаяся проверка. Подписка не обязательна: пакет уже пишет их
   /// в [VmLog]. Нужна тем, кто шлёт такое в свою телеметрию.

@@ -134,6 +134,35 @@ class VmV3Client {
     }
   }
 
+  /// Отмечает, что приложение прочитало вариант эксперимента [experimentKey].
+  ///
+  /// Как и [recordEvent], не бросает: экспозиция уточняет отчёт, но
+  /// эксперимент считается и без неё — по назначениям на сервере.
+  Future<void> recordExposure({required String experimentKey, required String instanceId}) async {
+    try {
+      final res = await _send(
+        () => _http.post(
+          _uri('/experiment-exposure'),
+          headers: _headers,
+          body: jsonEncode({'experimentKey': experimentKey, 'instanceId': instanceId}),
+        ),
+      );
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        _log.warning(
+          'experiment exposure was not delivered',
+          error: VmApiException.fromResponse(res.statusCode, res.body),
+          data: {'experiment': experimentKey},
+        );
+      }
+    } on VmNetworkException catch (e) {
+      _log.warning('experiment exposure was not delivered', error: e, data: {'experiment': experimentKey});
+    } catch (e) {
+      // Экспозицию отправляют не дожидаясь ответа, поэтому любое исключение
+      // отсюда стало бы необработанной ошибкой в зоне приложения.
+      _log.warning('experiment exposure was not delivered', error: e, data: {'experiment': experimentKey});
+    }
+  }
+
   /// Запрос с таймаутом и повтором на сетевых сбоях и 5xx.
   Future<http.Response> _send(Future<http.Response> Function() run) async {
     Object? lastError;

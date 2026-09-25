@@ -1,3 +1,13 @@
+## 0.8.0
+
+- **A/B тесты** (version_manager_back#54). `vm.experiment(key)` отдаёт вариант
+  эксперимента или `null`, если устройство в него не попало, и при первом
+  чтении за запуск отправляет экспозицию (`POST /experiment-exposure`).
+  `vm.experiments` — все варианты без экспозиции. Варианты едут в
+  сохранённом конфиге вместе с флагами.
+- `CheckResult.experiments`, `VmV3Client.recordExposure`. Экспозиция не
+  бросает: любой отказ — строка в логе.
+
 ## 0.7.0
 
 - **Feature flags** (version_manager_back#51). `vm.flag<T>(key, defaultValue)`
