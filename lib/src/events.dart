@@ -86,8 +86,12 @@ class VmEventQueue {
   /// отправить. Через очередь — чтобы экспозиция, как и события, переживала
   /// закрытие приложения и сбой сети: одиночный запрос терялся, если человек
   /// уходил с экрана теста раньше, чем он доезжал (checker#16).
+  ///
+  /// Установка запоминается вместе с экспозицией: из очереди она может уйти
+  /// уже после смены instanceId, и засчитаться должна той установке, которая
+  /// экран видела.
   void addExposure(String experimentKey) {
-    _queue.add({'exposure': experimentKey});
+    _queue.add({'exposure': experimentKey, 'instanceId': instanceId()});
     _trim();
     _save();
     unawaited(flush());
@@ -120,7 +124,8 @@ class VmEventQueue {
       final VmSendResult result;
       if (exposure is String) {
         taken = 1;
-        result = await client.recordExposure(experimentKey: exposure, instanceId: instanceId());
+        final owner = _queue.first['instanceId'];
+        result = await client.recordExposure(experimentKey: exposure, instanceId: owner is String ? owner : instanceId());
       } else {
         // Пачка — подряд идущие события до первой экспозиции.
         final batch = _queue.take(batchSize).takeWhile((e) => e['exposure'] == null).toList();
