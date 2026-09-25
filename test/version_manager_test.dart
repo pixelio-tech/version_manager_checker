@@ -31,7 +31,9 @@ Future<VersionManager> _manager(MockClient mock, {VmStorage? storage}) => Versio
 void main() {
   test('instanceId генерируется один раз и переживает переинициализацию', () async {
     final storage = VmMemoryStorage();
-    final mock = MockClient((_) async => http.Response(jsonEncode(_body()), 200, headers: {'etag': 'hash-1'}));
+    final mock = MockClient(
+      (_) async => http.Response(jsonEncode(_body()), 200, headers: {'etag': 'hash-1'}),
+    );
 
     final first = await _manager(mock, storage: storage);
     final id = first.instanceId;
@@ -138,7 +140,10 @@ void main() {
     final storage = VmMemoryStorage();
     final mock = MockClient((_) async => throw const SocketException('сеть недоступна'));
     await storage.write('vm.config', jsonEncode(_body(hash: 'old')));
-    await storage.write('vm.configAt', DateTime.now().toUtc().subtract(const Duration(days: 30)).toIso8601String());
+    await storage.write(
+      'vm.configAt',
+      DateTime.now().toUtc().subtract(const Duration(days: 30)).toIso8601String(),
+    );
 
     final vm = await VersionManager.init(
       baseUrl: 'https://api.test',

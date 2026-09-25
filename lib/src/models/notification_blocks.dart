@@ -270,7 +270,13 @@ class StackBlock extends NotificationBlock {
   /// topLeft | topRight | bottomLeft | bottomRight | center
   final String alignment;
 
-  const StackBlock({required super.id, super.flex, super.box, required this.children, this.alignment = 'topLeft'});
+  const StackBlock({
+    required super.id,
+    super.flex,
+    super.box,
+    required this.children,
+    this.alignment = 'topLeft',
+  });
 }
 
 class TextBlock extends NotificationBlock {

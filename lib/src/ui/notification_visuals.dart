@@ -27,12 +27,8 @@ BoxDecoration notificationCardDecoration(NotificationStyle style, {required bool
         ? [style.shadowCustom!]
         : switch (style.shadow) {
             NotificationShadow.none => null,
-            NotificationShadow.soft => const [
-              BoxShadow(color: Color(0x40000000), blurRadius: 20, offset: Offset(0, 8)),
-            ],
-            NotificationShadow.strong => const [
-              BoxShadow(color: Color(0x73000000), blurRadius: 44, offset: Offset(0, 18)),
-            ],
+            NotificationShadow.soft => const [BoxShadow(color: Color(0x40000000), blurRadius: 20, offset: Offset(0, 8))],
+            NotificationShadow.strong => const [BoxShadow(color: Color(0x73000000), blurRadius: 44, offset: Offset(0, 18))],
           },
   );
 }
@@ -48,19 +44,14 @@ Widget notificationNetworkImage(String url, {double? width, double? height, BoxF
     if (comma == -1 || !meta.contains(';base64')) return const SizedBox.shrink();
     try {
       final bytes = base64Decode(url.substring(comma + 1));
-      return Image.memory(
-        bytes,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
-      );
+      return Image.memory(bytes, width: width, height: height, fit: fit, errorBuilder: (_, _, _) => const SizedBox.shrink());
     } on FormatException {
       return const SizedBox.shrink();
     }
   }
   return Image.network(url, width: width, height: height, fit: fit, errorBuilder: (_, _, _) => const SizedBox.shrink());
 }
+
 
 /// Dismiss affordance drawn in the card's corner when `style.closeButton`.
 class NotificationCloseButton extends StatelessWidget {
@@ -247,8 +238,7 @@ class _NotificationButton extends StatelessWidget {
   }
 }
 
-Color _onColor(Color bg) =>
-    ThemeData.estimateBrightnessForColor(bg) == Brightness.light ? const Color(0xFF141821) : Colors.white;
+Color _onColor(Color bg) => ThemeData.estimateBrightnessForColor(bg) == Brightness.light ? const Color(0xFF141821) : Colors.white;
 
 /// App/custom icon badge, or nothing when `icon.source == none`.
 /// Иконка узла `icon`. Все свойства приходят из узла: у карточки своей

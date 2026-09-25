@@ -43,25 +43,26 @@ Widget _host({
   List<String>? actions,
   List<String>? skipped,
   String locale = 'ru',
-}) => MaterialApp(
-  home: Scaffold(
-    body: Builder(
-      builder: (context) => Center(
-        child: ElevatedButton(
-          onPressed: () => presentVmNotification(
-            context,
-            payload: payload,
-            locale: locale,
-            onAction: (kind, value) => actions?.add('$kind:${value ?? ''}'),
-            onEvent: (id, type) => events.add('$id:$type'),
-            onEmpty: (p) => skipped?.add(p.id),
+}) =>
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: ElevatedButton(
+              onPressed: () => presentVmNotification(
+                context,
+                payload: payload,
+                locale: locale,
+                onAction: (kind, value) => actions?.add('$kind:${value ?? ''}'),
+                onEvent: (id, type) => events.add('$id:$type'),
+                onEmpty: (p) => skipped?.add(p.id),
+              ),
+              child: const Text('показать'),
+            ),
           ),
-          child: const Text('показать'),
         ),
       ),
-    ),
-  ),
-);
+    );
 
 void main() {
   testWidgets('карточка без детей не показывается — затемнение без содержимого хуже', (tester) async {
@@ -71,13 +72,7 @@ void main() {
     for (final type in ['modal', 'bottomSheet', 'banner']) {
       final events = <String>[];
       final skipped = <String>[];
-      await tester.pumpWidget(
-        _host(
-          payload: _payload(type: type),
-          events: events,
-          skipped: skipped,
-        ),
-      );
+      await tester.pumpWidget(_host(payload: _payload(type: type), events: events, skipped: skipped));
 
       await tester.tap(find.text('показать'));
       await tester.pump();
@@ -266,10 +261,7 @@ void main() {
     await tester.tap(find.text('показать'));
     await tester.pumpAndSettle();
 
-    final rects = tester
-        .widgetList<Container>(find.byType(Container))
-        .where((c) => c.constraints?.maxHeight == 4)
-        .toList();
+    final rects = tester.widgetList<Container>(find.byType(Container)).where((c) => c.constraints?.maxHeight == 4).toList();
     expect(rects, hasLength(2));
     final sizes = find
         .byType(Container)

@@ -71,7 +71,11 @@ class VmEventQueue {
       log.error('event value is not a finite number and was dropped', data: {'name': name});
       return false;
     }
-    _queue.add({'name': name, 'value': ?value, 'occurredAt': DateTime.now().toUtc().toIso8601String()});
+    _queue.add({
+      'name': name,
+      'value': ?value,
+      'occurredAt': DateTime.now().toUtc().toIso8601String(),
+    });
     _trim();
     _save();
     if (_queue.length >= flushAt) unawaited(flush());

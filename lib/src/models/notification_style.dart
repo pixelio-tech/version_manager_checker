@@ -211,9 +211,7 @@ enum ButtonsLayout {
   factory ButtonsLayout.fromJson(String? v) =>
       // `column` — синоним `stack`: так эту раскладку называет дерево блоков
       // конструктора, и кнопки не должны молча вставать в строку.
-      v == 'column'
-      ? ButtonsLayout.stack
-      : ButtonsLayout.values.firstWhere((e) => e.name == v, orElse: () => ButtonsLayout.row);
+      v == 'column' ? ButtonsLayout.stack : ButtonsLayout.values.firstWhere((e) => e.name == v, orElse: () => ButtonsLayout.row);
 }
 
 enum NotificationButtonStyle {
@@ -249,6 +247,8 @@ class NotificationColors {
     overlay: _colorOr(json['overlay'], null),
   );
 }
+
+
 
 class NotificationButtonConfig {
   final String id;

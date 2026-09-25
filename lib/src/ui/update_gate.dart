@@ -159,13 +159,7 @@ class VmUpdateGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (vmVerdictFor(result) == VmGateVerdict.pass) return child;
-    return VmBlockedScreen(
-      result: result!,
-      platform: platform,
-      onOpenStore: onOpenStore,
-      title: title,
-      description: description,
-    );
+    return VmBlockedScreen(result: result!, platform: platform, onOpenStore: onOpenStore, title: title, description: description);
   }
 }
 

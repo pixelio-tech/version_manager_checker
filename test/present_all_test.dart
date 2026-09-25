@@ -70,7 +70,8 @@ void main() {
     // первой, когда ответ сервера тот же самый.
     final vm = await _vm(_config('hash-1'));
     final outcome = await vm.check();
-    expect(outcome, isA<VmFresh>(), reason: 'проверка не дошла: ${outcome is VmUnavailable ? outcome.cause : outcome}');
+    expect(outcome, isA<VmFresh>(),
+        reason: 'проверка не дошла: ${outcome is VmUnavailable ? outcome.cause : outcome}');
 
     late BuildContext ctx;
     await tester.pumpWidget(

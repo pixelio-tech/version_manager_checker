@@ -111,7 +111,11 @@ class VmV3Client {
         () => _http.post(
           _uri('/notification-event'),
           headers: _headers,
-          body: jsonEncode({'notificationId': notificationId, 'instanceId': instanceId, 'eventType': eventType}),
+          body: jsonEncode({
+            'notificationId': notificationId,
+            'instanceId': instanceId,
+            'eventType': eventType,
+          }),
         ),
       );
       if (res.statusCode < 200 || res.statusCode >= 300) {

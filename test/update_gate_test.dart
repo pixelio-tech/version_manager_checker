@@ -2,33 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
 
-CheckResult _result({
-  String status = 'active',
-  bool blocked = false,
-  String priority = 'none',
-  bool withStore = true,
-}) => CheckResult.fromJson({
-  'status': status,
-  'isBlocked': blocked,
-  'blockReason': blocked ? 'Версия снята с поддержки' : null,
-  'updatePriority': priority,
-  'recommendedVersion': {
-    'versionNumber': '4.2.0',
-    'buildNumber': 420,
-    'changelog': 'Починили синхронизацию',
-    'storeLinks': withStore
-        ? [
-            {'platform': 'ios', 'storeName': 'App Store', 'url': 'https://apps.apple.com/app/id1'},
-            {'platform': 'android', 'storeName': 'Google Play', 'url': 'https://play.google.com/x'},
-          ]
-        : <Map<String, dynamic>>[],
-  },
-  'notifications': const <Map<String, dynamic>>[],
-  'nextCheckInterval': 3600,
-  'configHash': 'h',
-  'message': 'Обновите приложение',
-  'serverTimestamp': '2026-09-20T10:00:00Z',
-});
+CheckResult _result({String status = 'active', bool blocked = false, String priority = 'none', bool withStore = true}) =>
+    CheckResult.fromJson({
+      'status': status,
+      'isBlocked': blocked,
+      'blockReason': blocked ? 'Версия снята с поддержки' : null,
+      'updatePriority': priority,
+      'recommendedVersion': {
+        'versionNumber': '4.2.0',
+        'buildNumber': 420,
+        'changelog': 'Починили синхронизацию',
+        'storeLinks': withStore
+            ? [
+                {'platform': 'ios', 'storeName': 'App Store', 'url': 'https://apps.apple.com/app/id1'},
+                {'platform': 'android', 'storeName': 'Google Play', 'url': 'https://play.google.com/x'},
+              ]
+            : <Map<String, dynamic>>[],
+      },
+      'notifications': const <Map<String, dynamic>>[],
+      'nextCheckInterval': 3600,
+      'configHash': 'h',
+      'message': 'Обновите приложение',
+      'serverTimestamp': '2026-09-20T10:00:00Z',
+    });
 
 void main() {
   test('вердикт: блокировка и обязательное обновление закрывают приложение', () {

@@ -18,13 +18,7 @@ class NotificationBlocks extends StatelessWidget {
   /// экран — уведомление выглядело бы «раздутым».
   final bool fill;
 
-  const NotificationBlocks({
-    super.key,
-    required this.style,
-    required this.locale,
-    required this.onButtonTap,
-    this.fill = false,
-  });
+  const NotificationBlocks({super.key, required this.style, required this.locale, required this.onButtonTap, this.fill = false});
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +107,13 @@ class NotificationBlocks extends StatelessWidget {
         },
         children: [for (final child in b.children) _render(child, isRow: false)],
       ),
-      IconBlock b => NotificationIconBadge(style: style, size: b.size, source: b.source, url: b.url, shape: b.shape),
+      IconBlock b => NotificationIconBadge(
+        style: style,
+        size: b.size,
+        source: b.source,
+        url: b.url,
+        shape: b.shape,
+      ),
       ButtonsBlock b => NotificationButtonsRow(
         style: style,
         locale: locale,
@@ -295,12 +295,7 @@ class NotificationBlocks extends StatelessWidget {
         children: [for (final child in b.children) _render(child, isRow: false)],
       );
     } else if (b.isRow) {
-      inner = Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: mainAxis,
-        crossAxisAlignment: crossAxis,
-        children: children,
-      );
+      inner = Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: mainAxis, crossAxisAlignment: crossAxis, children: children);
     } else {
       inner = Column(
         mainAxisSize: MainAxisSize.min,

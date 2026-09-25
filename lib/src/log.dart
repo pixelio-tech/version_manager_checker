@@ -30,7 +30,13 @@ enum VmLogLevel {
 
 /// Одна запись диагностики.
 class VmLogEvent {
-  const VmLogEvent({required this.level, required this.message, this.error, this.stackTrace, this.data = const {}});
+  const VmLogEvent({
+    required this.level,
+    required this.message,
+    this.error,
+    this.stackTrace,
+    this.data = const {},
+  });
 
   final VmLogLevel level;
   final String message;
@@ -83,9 +89,11 @@ class VmLog {
     }
   }
 
-  void debug(String message, {Map<String, Object?> data = const {}}) => call(VmLogLevel.debug, message, data: data);
+  void debug(String message, {Map<String, Object?> data = const {}}) =>
+      call(VmLogLevel.debug, message, data: data);
 
-  void info(String message, {Map<String, Object?> data = const {}}) => call(VmLogLevel.info, message, data: data);
+  void info(String message, {Map<String, Object?> data = const {}}) =>
+      call(VmLogLevel.info, message, data: data);
 
   void warning(String message, {Object? error, Map<String, Object?> data = const {}}) =>
       call(VmLogLevel.warning, message, error: error, data: data);
