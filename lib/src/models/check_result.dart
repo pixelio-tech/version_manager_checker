@@ -13,6 +13,11 @@ class CheckResult {
   /// обновление» сервер присылает уведомлением, а не этим полем.
   final UpdateTarget? updateTarget;
   final List<NotificationPayload> notifications;
+
+  /// Значения feature flags для этого устройства: `{ключ: значение}` (#51).
+  /// Читать удобнее через [VersionManager.flag] — там приведение типа и
+  /// значение по умолчанию.
+  final Map<String, Object?> flags;
   final int nextCheckInterval;
   final String configHash;
   final String message;
@@ -25,6 +30,7 @@ class CheckResult {
     required this.updatePriority,
     this.updateTarget,
     required this.notifications,
+    this.flags = const {},
     required this.nextCheckInterval,
     required this.configHash,
     required this.message,
@@ -40,6 +46,7 @@ class CheckResult {
     updateTarget: json['recommendedVersion'] != null
         ? UpdateTarget.fromJson(json['recommendedVersion'] as Map<String, dynamic>)
         : null,
+    flags: json['flags'] is Map ? Map<String, Object?>.unmodifiable(json['flags'] as Map) : const {},
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(NotificationPayload.fromJson)

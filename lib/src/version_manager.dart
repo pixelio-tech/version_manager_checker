@@ -108,6 +108,8 @@ class VersionManager {
   String? _presentedHash;
 
   final _results = StreamController<CheckResult>.broadcast();
+  final _flagChanges = StreamController<Map<String, Object?>>.broadcast();
+  final Set<String> _flagTypeWarned = {};
   final _failures = StreamController<Object>.broadcast();
 
   VersionManager._({
@@ -221,6 +223,47 @@ class VersionManager {
   /// Каждая проверка, вернувшая новый конфиг. 304 сюда не попадает.
   Stream<CheckResult> get results => _results.stream;
 
+  /// Текущие значения feature flags (#51): из последнего ответа или из
+  /// сохранённого, пока он не просрочен. Пусто — сервер ещё не отвечал и
+  /// сохранённого нет; тогда [flag] отдаёт значения по умолчанию из кода.
+  Map<String, Object?> get flags => _last?.flags ?? const {};
+
+  /// Значения флагов после каждой проверки, в которой они изменились.
+  /// Подписка не обязательна — [flag] всегда читает текущее.
+  Stream<Map<String, Object?>> get flagChanges => _flagChanges.stream;
+
+  /// Значение флага [key] нужного типа или [defaultValue].
+  ///
+  /// Значение по умолчанию — то, с чем приложение работает без сервера:
+  /// до первого ответа, офлайн без сохранённого конфига, если флаг удалили
+  /// или его тип не совпал с ожидаемым. Числа приводятся между int и double.
+  ///
+  /// ```dart
+  /// if (vm.flag('new_checkout', false)) { ... }
+  /// final limit = vm.flag('upload_limit_mb', 50);
+  /// ```
+  T flag<T>(String key, T defaultValue) {
+    final raw = flags[key];
+    if (raw == null) return defaultValue;
+    if (raw is T) return raw as T;
+    if (raw is num) {
+      if (defaultValue is double) return raw.toDouble() as T;
+      if (defaultValue is int && raw == raw.roundToDouble()) return raw.toInt() as T;
+    }
+    // Тип в админке не совпал с кодом — это ошибка настройки, её надо видеть.
+    // Один раз на ключ: flag() зовут на каждом кадре.
+    if (_flagTypeWarned.add(key)) {
+      _log.warning(
+        'feature flag has an unexpected type, using the default',
+        data: {'key': key, 'expected': '$T', 'got': raw.runtimeType.toString()},
+      );
+    }
+    return defaultValue;
+  }
+
+  /// Короткая форма для булевых флагов.
+  bool isEnabled(String key, {bool defaultValue = false}) => flag<bool>(key, defaultValue);
+
   /// Каждая неудавшаяся проверка. Подписка не обязательна: пакет уже пишет их
   /// в [VmLog]. Нужна тем, кто шлёт такое в свою телеметрию.
   Stream<Object> get failures => _failures.stream;
@@ -291,10 +334,12 @@ class VersionManager {
         return VmUnchanged(_last);
       }
 
+      final before = flags;
       _last = res.result;
       _lastAt = DateTime.now();
       await _saveCache(res.raw);
       _results.add(res.result!);
+      if (!_sameFlags(before, res.result!.flags)) _flagChanges.add(res.result!.flags);
       _log.info(
         'check completed',
         data: {
@@ -320,6 +365,14 @@ class VersionManager {
     );
     if (_failures.hasListener) _failures.add(e);
     return VmUnavailable(e, result: fresh ? _last : null, cacheAge: cacheAge);
+  }
+
+  static bool _sameFlags(Map<String, Object?> a, Map<String, Object?> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (!b.containsKey(e.key) || jsonEncode(e.value) != jsonEncode(b[e.key])) return false;
+    }
+    return true;
   }
 
   Future<void> _rememberEtag(String? etag) async {
@@ -515,6 +568,7 @@ class VersionManager {
     stopPolling();
     _results.close();
     _failures.close();
+    _flagChanges.close();
     client.close();
     if (identical(_instance, this)) _instance = null;
   }
