@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import 'client.dart';
+import 'events.dart';
 import 'log.dart';
 import 'models/check_result.dart';
 import 'outcome.dart';
@@ -98,6 +99,11 @@ class VersionManager {
   CheckResult? _last;
   DateTime? _lastAt;
   Timer? _poll;
+  Timer? _eventsTimer;
+  late final VmEventQueue _events;
+
+  /// Как часто отправлять накопленные события, если очередь не заполнилась.
+  static const eventsInterval = Duration(seconds: 30);
   bool _disposed = false;
 
   int _launch = 1;
@@ -196,6 +202,9 @@ class VersionManager {
       it._log.error('storage is unavailable, continuing without it', error: e, stackTrace: st);
       it._instanceId ??= await it._newInstanceId();
     }
+    it._events = VmEventQueue(client: it.client, storage: store, instanceId: () => it.instanceId, log: it._log);
+    await it._events.restore();
+    it._eventsTimer = Timer.periodic(eventsInterval, (_) => unawaited(it._events.flush()));
     _instance = it;
     it._log.info(
       'initialized',
@@ -365,6 +374,9 @@ class VersionManager {
           .timeout(budget);
 
       await _rememberEtag(res.etag);
+      // Сервер ответил — сеть есть: самое время отправить события, которые
+      // копились офлайн.
+      if (_events.length > 0) unawaited(_events.flush());
 
       if (res.result == null) {
         // 304: сервер подтвердил, что конфиг актуален. Это свежий ответ, а не
@@ -601,10 +613,29 @@ class VersionManager {
     }
   }
 
+  /// Событие приложения — цель A/B теста (#58): покупка, завершённый
+  /// онбординг, отправленное сообщение. [value] — необязательное число для
+  /// метрики «сумма на участника»: выручка, длительность.
+  ///
+  /// ```dart
+  /// vm.track('purchase', value: 9.99);
+  /// vm.track('onboarding.done');
+  /// ```
+  ///
+  /// Не ждёт сети: событие ложится в очередь, очередь переживает перезапуск
+  /// и офлайн и уходит пачками. Возвращает false, если имя или значение
+  /// кривые — такое событие отброшено и записано в лог.
+  bool track(String name, {num? value}) => _events.add(name, value: value);
+
+  /// Отправить накопленные события сейчас — например, перед тем как
+  /// приложение уйдёт в фон. Не бросает.
+  Future<void> flushEvents() => _events.flush();
+
   /// Закрывает клиент и таймеры. После этого нужен новый [init].
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _eventsTimer?.cancel();
     stopPolling();
     _results.close();
     _failures.close();

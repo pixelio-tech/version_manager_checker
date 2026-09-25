@@ -10,6 +10,7 @@
 library;
 
 export 'src/client.dart';
+export 'src/events.dart' show VmEventQueue;
 export 'src/models/check_result.dart';
 export 'src/outcome.dart';
 export 'src/models/notification_blocks.dart';

@@ -163,6 +163,36 @@ class VmV3Client {
     }
   }
 
+  /// Отправляет пачку событий приложения (цели A/B тестов).
+  ///
+  /// Не бросает — говорит, что делать с пачкой: [VmSendResult.sent] —
+  /// принята, [VmSendResult.retry] — сеть или сервер, отправить позже,
+  /// [VmSendResult.rejected] — сервер отверг содержимое (4xx): повтор не
+  /// поможет, пачку надо выбросить, иначе она застрянет в очереди навсегда.
+  Future<VmSendResult> sendEvents({required String instanceId, required List<Map<String, Object?>> events}) async {
+    try {
+      final res = await _send(
+        () => _http.post(
+          _uri('/events'),
+          headers: _headers,
+          body: jsonEncode({'instanceId': instanceId, 'events': events}),
+        ),
+      );
+      if (res.statusCode >= 200 && res.statusCode < 300) return VmSendResult.sent;
+      final err = VmApiException.fromResponse(res.statusCode, res.body);
+      // 429 и 403 — не про содержимое: лимит пройдёт, ключ перевыпустят.
+      if (res.statusCode >= 500 || res.statusCode == 429 || res.statusCode == 403) {
+        _log.warning('events were not delivered, will retry', error: err, data: {'count': events.length});
+        return VmSendResult.retry;
+      }
+      _log.error('events were rejected and dropped', error: err, data: {'count': events.length});
+      return VmSendResult.rejected;
+    } catch (e) {
+      _log.warning('events were not delivered, will retry', error: e, data: {'count': events.length});
+      return VmSendResult.retry;
+    }
+  }
+
   /// Запрос с таймаутом и повтором на сетевых сбоях и 5xx.
   Future<http.Response> _send(Future<http.Response> Function() run) async {
     Object? lastError;
@@ -281,3 +311,6 @@ class VmNetworkException implements Exception {
   @override
   String toString() => 'VmNetworkException: $reason';
 }
+
+/// Что стало с пачкой событий, см. [VmV3Client.sendEvents].
+enum VmSendResult { sent, retry, rejected }
