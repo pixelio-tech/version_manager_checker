@@ -9,6 +9,7 @@ import 'events.dart';
 import 'log.dart';
 import 'models/check_result.dart';
 import 'outcome.dart';
+import 'push_channel.dart';
 import 'storage.dart';
 import 'ui/notification_presenter.dart';
 
@@ -531,22 +532,40 @@ class VersionManager {
   /// (на каждом старте, при `onTokenRefresh`) в сеть не ходит. Не дошло —
   /// уйдёт при следующем вызове. Firebase пакет не тянет: токен получает
   /// приложение или `version_manager_v3_push`.
-  Future<void> setPushToken(String? token) async {
+  ///
+  /// [channels] — каналы уведомлений Android (back#84), первый или
+  /// [defaultChannel] — канал рассылки без выбранного канала. Сервер
+  /// запоминает их для выбора в админке.
+  ///
+  /// Результат — дошёл ли токен: [VmSendResult.retry] значит, что сервер
+  /// недоступен и токен уйдёт при следующем вызове.
+  Future<VmSendResult> setPushToken(
+    String? token, {
+    List<VmPushChannel> channels = const [],
+    String? defaultChannel,
+  }) async {
     final t = token ?? '';
-    final signature = '$t|$buildNumber|$locale';
+    final valid = channels.where((c) => c.isValid).toList();
+    for (final c in channels.where((c) => !c.isValid)) {
+      _log.warning('push channel is skipped: bad id or name', data: {'id': c.id});
+    }
+    final def = valid.any((c) => c.id == defaultChannel) ? defaultChannel : (valid.isEmpty ? null : valid.first.id);
+    final wire = [for (final c in valid) c.toJson(isDefault: c.id == def)];
+    final signature = '$t|$buildNumber|$locale|${jsonEncode(wire)}';
     String? sent;
     try {
       sent = await storage.read(_kPushToken);
     } catch (_) {}
-    if (sent == signature) return;
+    if (sent == signature) return VmSendResult.sent;
     final res = await client.registerPushToken(
       instanceId: instanceId,
       platform: platform,
       token: t,
       buildNumber: buildNumber,
       locale: locale,
+      channels: t.isEmpty ? const [] : wire,
     );
-    if (res == VmSendResult.retry) return;
+    if (res == VmSendResult.retry) return res;
     // Отвергнутый токен тоже запоминаем: повтор с тем же токеном получит тот
     // же отказ, а новый токен придёт с onTokenRefresh.
     try {
@@ -555,6 +574,7 @@ class VersionManager {
       _log.warning('push token state was not saved', error: e);
     }
     _log.info(t.isEmpty ? 'push token removed' : 'push token registered', data: {'result': res.name});
+    return res;
   }
 
   /// Разбирает data открытого пуша рассылки: отмечает открытие на сервере и

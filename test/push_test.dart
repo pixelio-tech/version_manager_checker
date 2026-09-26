@@ -101,4 +101,50 @@ void main() {
     expect(await vm.pushOpened({'from': 'другой сервис'}), isNull);
     expect(await vm.pushOpened({'vm_notification_id': 'n', 'vm_action': '{битый'}), isA<VmPushOpen>());
   });
+
+  test('каналы Android уходят с токеном; смена каналов — повод отправить снова', () async {
+    final s = _server();
+    final vm = await _manager(s.client, VmMemoryStorage());
+    const important = VmPushChannel('important', 'Важное');
+    const promo = VmPushChannel('promo', 'Акции', description: 'Скидки', importance: VmPushImportance.low);
+
+    final r = await vm.setPushToken('tok', channels: [important, promo], defaultChannel: 'promo');
+    expect(r, VmSendResult.sent);
+    expect(s.calls.single.$2['channels'], [
+      {'id': 'important', 'name': 'Важное', 'importance': 'high', 'isDefault': false},
+      {'id': 'promo', 'name': 'Акции', 'description': 'Скидки', 'importance': 'low', 'isDefault': true},
+    ]);
+
+    await vm.setPushToken('tok', channels: [important, promo], defaultChannel: 'promo');
+    expect(s.calls, hasLength(1), reason: 'ничего не поменялось');
+
+    // Новая сборка завела канал — сервер должен узнать, иначе в админке его нет.
+    await vm.setPushToken(
+      'tok',
+      channels: [important, promo, const VmPushChannel('news', 'Новости')],
+      defaultChannel: 'promo',
+    );
+    expect(s.calls, hasLength(2));
+
+    // Кривой канал не ломает регистрацию; неизвестный канал по умолчанию —
+    // первый из годных.
+    await vm.setPushToken('tok', channels: [const VmPushChannel('с пробелом', 'x'), important], defaultChannel: 'nope');
+    expect(s.calls.last.$2['channels'], [
+      {'id': 'important', 'name': 'Важное', 'importance': 'high', 'isDefault': true},
+    ]);
+
+    // Отказ от уведомлений — без каналов.
+    await vm.setPushToken(null, channels: [important]);
+    expect(s.calls.last.$2.containsKey('channels'), isFalse);
+  });
+
+  test('недоступный сервер — результат retry, а не «передан»', () async {
+    final vm = await _manager(MockClient((_) async => http.Response('', 503)), VmMemoryStorage());
+    expect(await vm.setPushToken('tok'), VmSendResult.retry);
+  });
+
+  test('VmPushImportance.normal уходит как default', () {
+    expect(VmPushImportance.normal.wire, 'default');
+    expect(const VmPushChannel('a', 'b').toJson()['importance'], 'high');
+  });
 }
