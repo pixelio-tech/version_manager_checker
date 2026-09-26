@@ -29,3 +29,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Пакет push (папка push/) — свой build и lock, как у корня.
+/push/build/
+/push/pubspec.lock

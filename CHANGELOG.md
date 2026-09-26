@@ -1,3 +1,15 @@
+## 0.11.0
+
+- **Remote push** (version_manager_back#53). `vm.setPushToken(token)` передаёт
+  серверу токен FCM установки (`POST /push-token`); пока токен, сборка и язык
+  те же — в сеть не ходит, не дошедший уходит при следующем вызове, `null` —
+  отказ от уведомлений. `vm.pushOpened(data)` отмечает открытие пуша рассылки
+  и отдаёт `VmPushOpen` с действием сообщения. `VmV3Client.registerPushToken`,
+  `recordPushOpened`. Firebase ядро не тянет.
+- Новый пакет `version_manager_v3_push` (папка `push/`): `VmPush.start(vm,
+  onOpen: …)` связывает `firebase_messaging` с менеджером — разрешение, токен,
+  его обновление, открытия. Подключение Firebase и APNs — в `push/README.md`.
+
 ## 0.10.0
 
 - **A/B тесты отдельно от флагов** (version_manager_back#66). Ломающее
