@@ -204,12 +204,14 @@ class VmV3Client {
     required String token,
     required int buildNumber,
     required String locale,
+    List<Map<String, Object?>> channels = const [],
   }) => _post('/push-token', 'push token', {
     'instanceId': instanceId,
     'platform': platform,
     'token': token,
     'buildNumber': buildNumber,
     'locale': locale,
+    if (channels.isNotEmpty) 'channels': channels,
   });
 
   /// Отмечает, что человек открыл пуш рассылки [campaignId].
