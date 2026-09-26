@@ -285,6 +285,14 @@ VersionManager.instance.stopPolling();
 Интервал берётся из `nextCheckInterval` ответа, `minInterval` — нижняя
 граница. Новый конфиг приходит и в поток `VersionManager.instance.results`.
 
+## Remote push
+
+Рассылки из админки доходят и до закрытого приложения через Firebase Cloud
+Messaging. Это отдельный пакет `version_manager_v3_push` в папке `push/` —
+приложения без пушей не тянут `firebase_messaging`. Подключение, APNs и
+проверка — в [`push/README.md`](push/README.md). Без него токен передаётся
+вручную: `vm.setPushToken(token)`, открытие — `vm.pushOpened(message.data)`.
+
 ## Хранилище
 
 **Без него статистика приложения врёт.** `instanceId` — то, по чему сервер

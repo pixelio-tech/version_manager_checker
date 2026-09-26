@@ -220,6 +220,7 @@ class VersionManager {
   static const _kConfig = 'vm.config';
   static const _kConfigAt = 'vm.configAt';
   static const _kLaunch = 'vm.launch';
+  static const _kPushToken = 'vm.pushToken';
 
   /// Идентификатор установки: по нему сервер считает частоту показов.
   String get instanceId => _instanceId ?? '';
@@ -522,6 +523,55 @@ class VersionManager {
     _poll = null;
   }
 
+  /// Передаёт серверу токен push этой установки (back#53) — для рассылок,
+  /// которые доходят и до закрытого приложения. `null` или пустая строка —
+  /// человек запретил уведомления или вышел: сервер забудет установку.
+  ///
+  /// Токен, сборка и язык запоминаются: пока они те же, повторный вызов
+  /// (на каждом старте, при `onTokenRefresh`) в сеть не ходит. Не дошло —
+  /// уйдёт при следующем вызове. Firebase пакет не тянет: токен получает
+  /// приложение или `version_manager_v3_push`.
+  Future<void> setPushToken(String? token) async {
+    final t = token ?? '';
+    final signature = '$t|$buildNumber|$locale';
+    String? sent;
+    try {
+      sent = await storage.read(_kPushToken);
+    } catch (_) {}
+    if (sent == signature) return;
+    final res = await client.registerPushToken(
+      instanceId: instanceId,
+      platform: platform,
+      token: t,
+      buildNumber: buildNumber,
+      locale: locale,
+    );
+    if (res == VmSendResult.retry) return;
+    // Отвергнутый токен тоже запоминаем: повтор с тем же токеном получит тот
+    // же отказ, а новый токен придёт с onTokenRefresh.
+    try {
+      await storage.write(_kPushToken, signature);
+    } catch (e) {
+      _log.warning('push token state was not saved', error: e);
+    }
+    _log.info(t.isEmpty ? 'push token removed' : 'push token registered', data: {'result': res.name});
+  }
+
+  /// Разбирает data открытого пуша рассылки: отмечает открытие на сервере и
+  /// возвращает действие сообщения (`{kind, url|deeplink|event}`) — выполнить
+  /// его должно приложение. Пуш не от Version Manager — `null`.
+  Future<VmPushOpen?> pushOpened(Map<String, Object?> data) async {
+    final open = VmPushOpen.fromData(data);
+    if (open == null) return null;
+    if (open.campaignId != null) {
+      // Открытие — не повод ждать сеть: не дошло, так не дошло, статистика
+      // рассылки просто недосчитается.
+      unawaited(client.recordPushOpened(campaignId: open.campaignId!, instanceId: instanceId));
+    }
+    _log.info('push opened', data: {'campaign': open.campaignId, 'action': open.action['kind']});
+    return open;
+  }
+
   /// Отправляет событие воронки за текущую установку.
   Future<void> recordEvent(String notificationId, String eventType) =>
       client.recordEvent(notificationId: notificationId, instanceId: instanceId, eventType: eventType);
@@ -687,5 +737,39 @@ class VmExperiment {
   /// с тестом показывается позже.
   void logExposure() {
     if (_assignment != null) _vm._expose(key);
+  }
+}
+
+/// Открытый пуш Version Manager: из какой рассылки и что сделать.
+class VmPushOpen {
+  /// Рассылка; `null` — тестовая отправка из админки.
+  final String? campaignId;
+  final String notificationId;
+
+  /// Действие сообщения: `{kind: url|deeplink|event|dismiss, …}` — как у
+  /// внутриигровых уведомлений. Пустое — просто открыть приложение.
+  final Map<String, Object?> action;
+
+  const VmPushOpen({required this.campaignId, required this.notificationId, required this.action});
+
+  /// Разбор data пуша (`vm_campaign_id`, `vm_notification_id`, `vm_action`).
+  /// Чужой пуш — `null`.
+  static VmPushOpen? fromData(Map<String, Object?> data) {
+    final notificationId = data['vm_notification_id'];
+    if (notificationId is! String || notificationId.isEmpty) return null;
+    final campaign = data['vm_campaign_id'];
+    Map<String, Object?> action = const {};
+    final raw = data['vm_action'];
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) action = Map<String, Object?>.from(decoded);
+      } catch (_) {}
+    }
+    return VmPushOpen(
+      campaignId: campaign is String && campaign.isNotEmpty ? campaign : null,
+      notificationId: notificationId,
+      action: action,
+    );
   }
 }

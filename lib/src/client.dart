@@ -193,6 +193,46 @@ class VmV3Client {
     }
   }
 
+  /// Регистрирует токен FCM установки (back#53). Пустой [token] — установка
+  /// отказалась от уведомлений: сервер её забывает.
+  ///
+  /// Не бросает, как [sendEvents]: [VmSendResult.retry] — отправить при
+  /// следующем вызове.
+  Future<VmSendResult> registerPushToken({
+    required String instanceId,
+    required String platform,
+    required String token,
+    required int buildNumber,
+    required String locale,
+  }) => _post('/push-token', 'push token', {
+    'instanceId': instanceId,
+    'platform': platform,
+    'token': token,
+    'buildNumber': buildNumber,
+    'locale': locale,
+  });
+
+  /// Отмечает, что человек открыл пуш рассылки [campaignId].
+  Future<VmSendResult> recordPushOpened({required String campaignId, required String instanceId}) =>
+      _post('/push-opened', 'push open', {'campaignId': campaignId, 'instanceId': instanceId});
+
+  Future<VmSendResult> _post(String path, String what, Map<String, Object?> body) async {
+    try {
+      final res = await _send(() => _http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
+      if (res.statusCode >= 200 && res.statusCode < 300) return VmSendResult.sent;
+      final err = VmApiException.fromResponse(res.statusCode, res.body);
+      if (res.statusCode >= 500 || res.statusCode == 429 || res.statusCode == 403) {
+        _log.warning('$what was not delivered, will retry', error: err);
+        return VmSendResult.retry;
+      }
+      _log.error('$what was rejected', error: err);
+      return VmSendResult.rejected;
+    } catch (e) {
+      _log.warning('$what was not delivered, will retry', error: e);
+      return VmSendResult.retry;
+    }
+  }
+
   /// Запрос с таймаутом и повтором на сетевых сбоях и 5xx.
   Future<http.Response> _send(Future<http.Response> Function() run) async {
     Object? lastError;
