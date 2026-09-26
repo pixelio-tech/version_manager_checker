@@ -147,4 +147,21 @@ void main() {
     expect(VmPushImportance.normal.wire, 'default');
     expect(const VmPushChannel('a', 'b').toJson()['importance'], 'high');
   });
+
+  test('каналы из админки разбираются из check-version', () {
+    final r = CheckResult.fromJson({
+      'status': 'active',
+      'pushChannels': [
+        {'id': 'promo', 'name': 'Акции', 'description': 'Скидки', 'importance': 'low'},
+        {'id': 'news', 'name': 'Новости', 'importance': 'default'},
+        {'id': 'broken'},
+        'мусор',
+      ],
+    });
+    expect(r.pushChannels.map((c) => c.id), ['promo', 'news']);
+    expect(r.pushChannels.first.importance, VmPushImportance.low);
+    expect(r.pushChannels.first.description, 'Скидки');
+    expect(r.pushChannels.last.importance, VmPushImportance.normal);
+    expect(CheckResult.fromJson({'status': 'active'}).pushChannels, isEmpty);
+  });
 }

@@ -15,6 +15,14 @@ enum VmPushImportance {
 
   /// Значение для сервера (`min`/`low`/`default`/`high`).
   String get wire => this == normal ? 'default' : name;
+
+  /// Разбор значения сервера; незнакомое — [high].
+  static VmPushImportance fromWire(Object? v) => switch (v) {
+    'min' => min,
+    'low' => low,
+    'default' => normal,
+    _ => high,
+  };
 }
 
 /// Канал уведомлений Android (back#84).
@@ -41,6 +49,21 @@ class VmPushChannel {
   final VmPushImportance importance;
 
   const VmPushChannel(this.id, this.name, {this.description, this.importance = VmPushImportance.high});
+
+  /// Канал из админки в ответе check-version (`pushChannels`, back#85).
+  static VmPushChannel? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'];
+    final name = json['name'];
+    if (id is! String || name is! String) return null;
+    final description = json['description'];
+    return VmPushChannel(
+      id,
+      name,
+      description: description is String && description.isNotEmpty ? description : null,
+      importance: VmPushImportance.fromWire(json['importance']),
+    );
+  }
 
   static final _idPattern = RegExp(r'^[A-Za-z0-9_.-]{1,64}$');
 

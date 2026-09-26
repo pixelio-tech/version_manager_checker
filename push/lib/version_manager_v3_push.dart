@@ -66,6 +66,13 @@ class VmPush {
   static StreamSubscription<String>? _refresh;
   static StreamSubscription<RemoteMessage>? _opened;
   static StreamSubscription<RemoteMessage>? _foreground;
+  static StreamSubscription<CheckResult>? _configs;
+
+  /// Каналы из админки (back#85), которые SDK создал на устройстве: по этому
+  /// списку он удаляет каналы, пропавшие из конфига. Каналы из кода сюда не
+  /// попадают — их приложение ведёт само.
+  static const _kAdminChannels = 'vm.pushAdminChannels';
+  static List<VmPushChannel> _adminChannels = const [];
   static VersionManager? _vm;
   static VmPushOpenHandler? _onOpen;
   static List<VmPushChannel> _channels = const [];
@@ -76,9 +83,11 @@ class VmPush {
   /// передаёт токен и каналы серверу и начинает слушать обновления токена,
   /// пуши при открытом приложении и открытия.
   ///
-  /// - [channels] — каналы Android (back#84). Пусто — один канал SDK
+  /// - [channels] — каналы Android из кода (back#84). Пусто — один канал SDK
   ///   ([fallbackChannel]). [defaultChannel] — канал рассылки без выбранного
-  ///   канала; по умолчанию первый.
+  ///   канала; по умолчанию первый. Каналы можно заводить и в админке
+  ///   (back#85): SDK берёт их из check-version, создаёт на устройстве и
+  ///   удаляет пропавшие; канал по умолчанию из админки важнее этого.
   /// - [showInForeground] — показывать рассылку, пока приложение открыто
   ///   (по умолчанию да). Иначе она приходит только в [onMessage].
   /// - Фоновый обработчик: по умолчанию SDK регистрирует
@@ -133,7 +142,11 @@ class VmPush {
     // iOS: пока приложение открыто, FCM показывает уведомление, только если
     // попросить явно. Android — локальным уведомлением ниже.
     await m.setForegroundNotificationPresentationOptions(alert: showInForeground, badge: true, sound: showInForeground);
-    if (_isAndroid) await _prepareAndroid(androidIcon, initializeLocalNotifications);
+    if (_isAndroid) {
+      await _prepareAndroid(androidIcon, initializeLocalNotifications);
+      await _syncAdminChannels(vm, vm.lastResult?.pushChannels ?? const []);
+      _configs = vm.results.listen((r) => unawaited(_syncAdminChannels(vm, r.pushChannels)));
+    }
 
     _foreground = FirebaseMessaging.onMessage.listen((msg) {
       if (showInForeground && _isAndroid) unawaited(_showLocal(msg));
@@ -196,9 +209,11 @@ class VmPush {
     await _refresh?.cancel();
     await _opened?.cancel();
     await _foreground?.cancel();
+    await _configs?.cancel();
     _refresh = null;
     _opened = null;
     _foreground = null;
+    _configs = null;
   }
 
   static VmPushStatus _statusOf(VmSendResult r) => switch (r) {
@@ -231,12 +246,52 @@ class VmPush {
     }
   }
 
+  /// Создаёт и обновляет каналы из админки, удаляет те, что SDK создал
+  /// раньше, а в конфиге их больше нет. Имя и описание Android обновляет у
+  /// существующего канала сам; важность — нет, её меняет только человек.
+  static Future<void> _syncAdminChannels(VersionManager vm, List<VmPushChannel> list) async {
+    final android = _local?.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return;
+    final code = {for (final c in _channels) c.id};
+    final fresh = [
+      for (final c in list)
+        if (c.isValid && !code.contains(c.id)) c,
+    ];
+    try {
+      for (final c in fresh) {
+        await android.createNotificationChannel(
+          AndroidNotificationChannel(c.id, c.name, description: c.description, importance: _importance(c.importance)),
+        );
+      }
+      final before = await _readAdminIds(vm);
+      final now = {for (final c in fresh) c.id};
+      for (final id in before.difference(now).difference(code)) {
+        await android.deleteNotificationChannel(channelId: id);
+      }
+      _adminChannels = fresh;
+      await vm.storage.write(_kAdminChannels, jsonEncode(now.toList()));
+    } catch (e) {
+      debugPrint('VmPush: admin channels were not synced: $e');
+    }
+  }
+
+  static Future<Set<String>> _readAdminIds(VersionManager vm) async {
+    try {
+      final raw = await vm.storage.read(_kAdminChannels);
+      if (raw == null) return {};
+      return {for (final id in jsonDecode(raw) as List) id as String};
+    } catch (_) {
+      return {};
+    }
+  }
+
   /// Показывает рассылку, пришедшую при открытом приложении, в её канале.
   static Future<void> _showLocal(RemoteMessage msg) async {
     final n = msg.notification;
     if (n == null) return;
     final wanted = n.android?.channelId;
-    final channel = _channels.firstWhere(
+    final all = [..._adminChannels, ..._channels];
+    final channel = all.firstWhere(
       (c) => c.id == wanted,
       orElse: () => _channels.firstWhere((c) => c.id == _defaultChannel, orElse: () => _channels.first),
     );

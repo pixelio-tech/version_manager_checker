@@ -1,3 +1,4 @@
+import '../push_channel.dart';
 import 'notification_style.dart';
 
 /// Response of `POST /api/mobile/v2/check-version` (see
@@ -24,6 +25,10 @@ class CheckResult {
   /// свои параметры. Читать удобнее через [VersionManager.experiment] — он
   /// же отмечает экспозицию.
   final Map<String, VmAssignment> experiments;
+
+  /// Каналы уведомлений Android, заведённые в админке (back#85). Их создаёт
+  /// на устройстве `version_manager_v3_push`; каналы из кода сюда не входят.
+  final List<VmPushChannel> pushChannels;
   final int nextCheckInterval;
   final String configHash;
   final String message;
@@ -38,6 +43,7 @@ class CheckResult {
     required this.notifications,
     this.flags = const {},
     this.experiments = const {},
+    this.pushChannels = const [],
     required this.nextCheckInterval,
     required this.configHash,
     required this.message,
@@ -55,6 +61,7 @@ class CheckResult {
         : null,
     flags: json['flags'] is Map ? Map<String, Object?>.unmodifiable(json['flags'] as Map) : const {},
     experiments: _assignments(json['experiments']),
+    pushChannels: [for (final c in json['pushChannels'] as List<dynamic>? ?? const []) ?VmPushChannel.fromJson(c)],
     notifications: (json['notifications'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(NotificationPayload.fromJson)
