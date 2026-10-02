@@ -288,10 +288,157 @@ VersionManager.instance.stopPolling();
 ## Remote push
 
 Рассылки из админки доходят и до закрытого приложения через Firebase Cloud
-Messaging. Это отдельный пакет `version_manager_v3_push` в папке `push/` —
-приложения без пушей не тянут `firebase_messaging`. Подключение, APNs и
-проверка — в [`push/README.md`](push/README.md). Без него токен передаётся
-вручную: `vm.setPushToken(token)`, открытие — `vm.pushOpened(message.data)`.
+Messaging. Обработчик пушей в приложении **один и принадлежит приложению**:
+Firebase держит один фоновый обработчик, у `flutter_local_notifications` один
+обработчик тапов, а пуш холодного старта читается один раз. Поэтому SDK ничего
+из этого не регистрирует и от Firebase не зависит — приложение зовёт его из
+своего обработчика, рядом со своими пушами.
+
+| Вызов | Когда |
+| --- | --- |
+| `vm.setPushToken(token, channels: …)` | при старте и в `onTokenRefresh`; `null` — уведомления запрещены или выход из аккаунта |
+| `VersionManager.isVmPush(message.data)` | отличить рассылку Version Manager от своих пушей |
+| `vm.pushChannelFor(channelId)` | в каком канале Android показать рассылку при открытом приложении |
+| `vm.planPushChannels()` | какие каналы Android создать и удалить (из кода и из админки) |
+| `vm.pushOpened(message.data)` | тап по пушу: отмечает открытие и отдаёт действие сообщения; чужой пуш — `null` |
+
+### Настройка Firebase
+
+1. **Firebase.** Создайте проект в консоли Firebase, добавьте приложения iOS и
+   Android, положите `GoogleService-Info.plist` и `google-services.json` (или
+   `flutterfire configure`). Если приложение уже шлёт свои пуши — тот же
+   проект: рассылки Version Manager и ваши пуши живут рядом.
+2. **iOS.** В Xcode — capability *Push Notifications* и *Background Modes →
+   Remote notifications*. В консоли Firebase → Project settings → Cloud
+   Messaging загрузите **APNs Authentication Key** (.p8). Без него iOS-пуши
+   отклоняются: в рассылке будет «APNs не принял сообщение».
+3. **Ключ для сервера.** Firebase → Project settings → Service accounts →
+   Generate new private key. JSON загрузите в админке: настройки приложения →
+   «Push-уведомления».
+
+### Обработчик
+
+Пример на `firebase_messaging` и `flutter_local_notifications` (для показа при
+открытом приложении на Android; этот плагин требует desugaring —
+`isCoreLibraryDesugaringEnabled = true` и `coreLibraryDesugaring(...)` в
+`android/app/build.gradle.kts`). Свои пуши обрабатываются в тех же местах —
+там, где `isVmPush` вернул `false`.
+
+```dart
+const channels = [
+  VmPushChannel('important', 'Важное'),                                  // баннер и звук
+  VmPushChannel('promo', 'Акции', importance: VmPushImportance.low),     // тихо, в шторке
+];
+final local = FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> onBackground(RemoteMessage message) async {
+  // Рассылку Version Manager показывает система: она приходит с заголовком
+  // и текстом. Здесь — только ваши фоновые пуши.
+}
+
+Future<void> startPush(VersionManager vm) async {
+  FirebaseMessaging.onBackgroundMessage(onBackground);
+  final fcm = FirebaseMessaging.instance;
+
+  final settings = await fcm.requestPermission();
+  if (settings.authorizationStatus == AuthorizationStatus.denied) {
+    await vm.setPushToken(null); // рассылка всё равно не покажется
+    return;
+  }
+  await fcm.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true); // iOS
+
+  // Тап по уведомлению: ваше или рассылка (payload — data пуша).
+  Future<void> opened(Map<String, Object?> data) async {
+    final open = await vm.pushOpened(data);
+    if (open == null) return /* свой пуш */;
+    switch (open.action['kind']) {
+      case 'url':
+        await launchUrl(Uri.parse(open.action['url'] as String));
+      case 'deeplink':
+        router.go(open.action['deeplink'] as String);
+    }
+  }
+
+  await local.initialize(
+    settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+    onDidReceiveNotificationResponse: (r) {
+      if (r.payload != null) opened(Map<String, Object?>.from(jsonDecode(r.payload!) as Map));
+    },
+  );
+
+  // Каналы Android: из кода и из админки. Повторять на каждый новый конфиг —
+  // каналы, заведённые в админке, появятся без выпуска сборки.
+  final android = local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  Future<void> syncChannels() async {
+    final plan = await vm.planPushChannels();
+    for (final c in plan.create) {
+      await android?.createNotificationChannel(AndroidNotificationChannel(
+        c.id, c.name, description: c.description, importance: importanceOf(c.importance)));
+    }
+    for (final id in plan.delete) {
+      await android?.deleteNotificationChannel(channelId: id);
+    }
+  }
+
+  await vm.setPushToken(await fcm.getToken(), channels: channels, defaultChannel: 'important');
+  fcm.onTokenRefresh.listen((t) => vm.setPushToken(t, channels: channels, defaultChannel: 'important'));
+  await syncChannels();
+  vm.results.listen((_) => syncChannels());
+
+  // Пока приложение открыто, Android сам рассылку не покажет.
+  FirebaseMessaging.onMessage.listen((m) {
+    final n = m.notification;
+    if (!VersionManager.isVmPush(m.data) || n == null || !Platform.isAndroid) return /* свой пуш */;
+    final c = vm.pushChannelFor(n.android?.channelId);
+    if (c == null) return;
+    local.show(
+      id: m.hashCode,
+      title: n.title,
+      body: n.body,
+      notificationDetails: NotificationDetails(android: AndroidNotificationDetails(
+        c.id, c.name, importance: importanceOf(c.importance))),
+      payload: jsonEncode(m.data),
+    );
+  });
+
+  final initial = await fcm.getInitialMessage();      // пуш, которым запустили приложение
+  if (initial != null) await opened(initial.data);
+  FirebaseMessaging.onMessageOpenedApp.listen((m) => opened(m.data));
+}
+
+Importance importanceOf(VmPushImportance i) => switch (i) {
+  VmPushImportance.min => Importance.min,
+  VmPushImportance.low => Importance.low,
+  VmPushImportance.normal => Importance.defaultImportance,
+  VmPushImportance.high => Importance.high,
+};
+```
+
+### Каналы Android
+
+С Android 8 каждое уведомление идёт через канал: у канала имя и важность, и
+человек выключает каналы по отдельности — например, «Акции», не трогая
+«Важное». Без своего канала FCM кладёт уведомления в «Miscellaneous» без
+баннера поверх экрана.
+
+- Каналы из кода уходят серверу с токеном; в админке у рассылки поле «Канал
+  (Android)». Рассылка без выбранного канала — в `defaultChannel` (по
+  умолчанию первый).
+- Каналы можно заводить и **в админке** («Настройки → Push-уведомления →
+  Каналы Android») без выпуска сборки: они приходят в check-version, и
+  `planPushChannels()` говорит, что создать и что удалить. Канал из админки с
+  тем же `id`, что в коде, принадлежит коду и не удаляется.
+- `id` канала не меняйте: Android считает канал с новым id другим, и
+  настройки человека пропадут. Важность Android запоминает при создании
+  канала — поменять её потом может только человек.
+- На iOS каналов нет, параметры ни на что не влияют.
+
+### Проверка
+
+В админке «Рассылки → Тест на устройство»: `instanceId` установки
+(`vm.instanceId`) и сообщение — уйдёт сразу на одно устройство, ответ FCM
+показывается там же.
 
 ## Хранилище
 

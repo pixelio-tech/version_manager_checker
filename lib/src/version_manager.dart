@@ -222,6 +222,14 @@ class VersionManager {
   static const _kConfigAt = 'vm.configAt';
   static const _kLaunch = 'vm.launch';
   static const _kPushToken = 'vm.pushToken';
+  // Каналы из админки, которые приложение создало на устройстве по
+  // [planPushChannels]: по ним находятся пропавшие из конфига. Ключ тот же,
+  // что был у пакета push, — установки, обновившиеся с него, не теряют список.
+  static const _kPushAdminChannels = 'vm.pushAdminChannels';
+
+  // Каналы Android из кода — последние, что пришли в [setPushToken].
+  List<VmPushChannel> _pushChannels = const [];
+  String? _defaultPushChannel;
 
   /// Идентификатор установки: по нему сервер считает частоту показов.
   String get instanceId => _instanceId ?? '';
@@ -531,7 +539,7 @@ class VersionManager {
   /// Токен, сборка и язык запоминаются: пока они те же, повторный вызов
   /// (на каждом старте, при `onTokenRefresh`) в сеть не ходит. Не дошло —
   /// уйдёт при следующем вызове. Firebase пакет не тянет: токен получает
-  /// приложение или `version_manager_v3_push`.
+  /// приложение в своём обработчике пушей (пример — в README).
   ///
   /// [channels] — каналы уведомлений Android (back#84), первый или
   /// [defaultChannel] — канал рассылки без выбранного канала. Сервер
@@ -550,6 +558,8 @@ class VersionManager {
       _log.warning('push channel is skipped: bad id or name', data: {'id': c.id});
     }
     final def = valid.any((c) => c.id == defaultChannel) ? defaultChannel : (valid.isEmpty ? null : valid.first.id);
+    _pushChannels = valid;
+    _defaultPushChannel = def;
     final wire = [for (final c in valid) c.toJson(isDefault: c.id == def)];
     final signature = '$t|$buildNumber|$locale|${jsonEncode(wire)}';
     String? sent;
@@ -591,6 +601,59 @@ class VersionManager {
     _log.info('push opened', data: {'campaign': open.campaignId, 'action': open.action['kind']});
     return open;
   }
+
+  /// Пуш от Version Manager? Чужие пуши (приложение шлёт их сам в тот же
+  /// Firebase-проект) SDK не трогает — их обрабатывает приложение.
+  static bool isVmPush(Map<String, Object?> data) => VmPushOpen.fromData(data) != null;
+
+  /// Канал Android, в котором показать рассылку, пришедшую при открытом
+  /// приложении: [channelId] из уведомления (`notification.android.channelId`),
+  /// иначе канал по умолчанию из кода. `null` — каналов приложение не
+  /// передавало: показывайте в своём канале по умолчанию.
+  VmPushChannel? pushChannelFor(String? channelId) {
+    // Канал с id из кода — канал приложения, даже если в админке завели такой же.
+    final all = [..._pushChannels, ..._adminPushChannels()];
+    for (final c in all) {
+      if (c.id == channelId) return c;
+    }
+    for (final c in _pushChannels) {
+      if (c.id == _defaultPushChannel) return c;
+    }
+    return _pushChannels.isEmpty ? null : _pushChannels.first;
+  }
+
+  /// Какие каналы Android завести и какие удалить на устройстве: каналы из
+  /// кода ([setPushToken]) и из админки (check-version, back#85). Из админки
+  /// удаляются пропавшие из конфига; каналы из кода не удаляются никогда —
+  /// их ведёт приложение. Звать после [setPushToken] и на каждый новый конфиг
+  /// ([results]); создание существующего канала Android только обновляет имя
+  /// и описание, важность у него меняет лишь человек.
+  ///
+  /// SDK считает план выполненным: следующий вызов не повторит удаление.
+  Future<VmPushChannelPlan> planPushChannels() async {
+    final code = {for (final c in _pushChannels) c.id};
+    final admin = _adminPushChannels().where((c) => !code.contains(c.id)).toList();
+    final now = {for (final c in admin) c.id};
+    var before = <String>{};
+    try {
+      final raw = await storage.read(_kPushAdminChannels);
+      if (raw != null) before = {for (final id in jsonDecode(raw) as List) id as String};
+    } catch (_) {}
+    try {
+      await storage.write(_kPushAdminChannels, jsonEncode(now.toList()));
+    } catch (e) {
+      _log.warning('push channel state was not saved', error: e);
+    }
+    return VmPushChannelPlan(
+      create: [..._pushChannels, ...admin],
+      delete: before.difference(now).difference(code).toList(),
+    );
+  }
+
+  List<VmPushChannel> _adminPushChannels() => [
+    for (final c in _last?.pushChannels ?? const <VmPushChannel>[])
+      if (c.isValid) c,
+  ];
 
   /// Отправляет событие воронки за текущую установку.
   Future<void> recordEvent(String notificationId, String eventType) =>

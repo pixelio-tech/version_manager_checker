@@ -27,7 +27,8 @@ class CheckResult {
   final Map<String, VmAssignment> experiments;
 
   /// Каналы уведомлений Android, заведённые в админке (back#85). Их создаёт
-  /// на устройстве `version_manager_v3_push`; каналы из кода сюда не входят.
+  /// на устройстве приложение по `VersionManager.planPushChannels`; каналы
+  /// из кода сюда не входят.
   final List<VmPushChannel> pushChannels;
   final int nextCheckInterval;
   final String configHash;

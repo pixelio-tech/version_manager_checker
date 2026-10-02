@@ -164,4 +164,62 @@ void main() {
     expect(r.pushChannels.last.importance, VmPushImportance.normal);
     expect(CheckResult.fromJson({'status': 'active'}).pushChannels, isEmpty);
   });
+
+  test('чужой пуш SDK не считает своим', () {
+    expect(VersionManager.isVmPush({'vm_notification_id': 'n1', 'vm_campaign_id': 'c1'}), isTrue);
+    expect(VersionManager.isVmPush({'order_id': '42', 'type': 'shipped'}), isFalse);
+    expect(VersionManager.isVmPush({'vm_notification_id': ''}), isFalse);
+  });
+
+  test('каналы: план для устройства и канал для показа рассылки', () async {
+    var admin = <Map<String, dynamic>>[
+      {'id': 'promo', 'name': 'Акции', 'importance': 'low'},
+      {'id': 'news', 'name': 'Новости', 'importance': 'default'},
+      // Совпадает с каналом из кода — его ведёт приложение, не админка.
+      {'id': 'important', 'name': 'Важное из админки', 'importance': 'high'},
+    ];
+    var n = 0;
+    final mock = MockClient((req) async {
+      if (!req.url.path.endsWith('check-version')) return http.Response('', 204);
+      final body = {'status': 'active', 'configHash': 'h${n++}', 'pushChannels': admin};
+      return http.Response.bytes(
+        utf8.encode(jsonEncode(body)),
+        200,
+        headers: {'etag': body['configHash'] as String, 'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final storage = VmMemoryStorage();
+    final vm = await _manager(mock, storage);
+
+    // Каналов приложение не передавало — показывать в его канале по умолчанию.
+    expect(vm.pushChannelFor('anything'), isNull);
+
+    const important = VmPushChannel('important', 'Важное');
+    const orders = VmPushChannel('orders', 'Заказы');
+    await vm.setPushToken('tok', channels: [important, orders], defaultChannel: 'orders');
+    await vm.check(force: true);
+
+    var plan = await vm.planPushChannels();
+    expect(plan.create.map((c) => c.id), ['important', 'orders', 'promo', 'news']);
+    expect(plan.delete, isEmpty);
+
+    expect(vm.pushChannelFor('promo')?.importance, VmPushImportance.low);
+    expect(vm.pushChannelFor('important')?.name, 'Важное', reason: 'канал из кода важнее одноимённого из админки');
+    expect(vm.pushChannelFor('удалённый')?.id, 'orders', reason: 'неизвестный — канал по умолчанию из кода');
+    expect(vm.pushChannelFor(null)?.id, 'orders');
+
+    // Канал «Новости» убрали в админке — на устройстве его надо удалить.
+    // Каналы из кода не удаляются, даже если их нет в конфиге.
+    admin = [admin.first];
+    await vm.check(force: true);
+    plan = await vm.planPushChannels();
+    expect(plan.create.map((c) => c.id), ['important', 'orders', 'promo']);
+    expect(plan.delete, ['news']);
+
+    // План выполнен: повторно «Новости» не удаляются, и после перезапуска тоже.
+    expect((await vm.planPushChannels()).delete, isEmpty);
+    final restarted = await _manager(mock, storage);
+    await restarted.check(force: true);
+    expect((await restarted.planPushChannels()).delete, isEmpty);
+  });
 }

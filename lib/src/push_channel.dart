@@ -78,3 +78,16 @@ class VmPushChannel {
     'isDefault': isDefault,
   };
 }
+
+/// Что сделать с каналами Android на устройстве — результат
+/// [VersionManager.planPushChannels]. Создаёт и удаляет каналы приложение
+/// своим плагином уведомлений: SDK от Firebase и плагинов не зависит.
+class VmPushChannelPlan {
+  /// Завести (или обновить имя и описание) — каналы из кода и из админки.
+  final List<VmPushChannel> create;
+
+  /// Удалить: каналы из админки, пропавшие из конфига.
+  final List<String> delete;
+
+  const VmPushChannelPlan({required this.create, required this.delete});
+}
