@@ -29,6 +29,9 @@ Future<VersionManager> _manager(MockClient mock, VmStorage storage, {int build =
     );
 
 void main() {
+  setUp(() => VersionManager.utcOffsetMinutes = () => 180);
+  tearDown(() => VersionManager.utcOffsetMinutes = () => DateTime.now().timeZoneOffset.inMinutes);
+
   test('токен push уходит один раз, пока не изменились токен, сборка или язык', () async {
     final s = _server();
     final storage = VmMemoryStorage();
@@ -45,6 +48,7 @@ void main() {
       'token': 'tok-1',
       'buildNumber': 41,
       'locale': 'ru-RU',
+      'utcOffsetMinutes': 180,
     });
 
     await vm.setPushToken('tok-2');
@@ -59,6 +63,75 @@ void main() {
 
     await updated.setPushToken(null);
     expect(s.calls.last.$2['token'], '', reason: 'отказ от уведомлений — пустой токен');
+  });
+
+  test('смена часового пояса — повод отправить токен снова (тихие часы по времени устройства)', () async {
+    final s = _server();
+    final vm = await _manager(s.client, VmMemoryStorage());
+    await vm.setPushToken('tok');
+    await vm.setPushToken('tok');
+    expect(s.calls, hasLength(1));
+
+    // Перелёт из Москвы во Владивосток.
+    VersionManager.utcOffsetMinutes = () => 600;
+    await vm.setPushToken('tok');
+    expect(s.calls, hasLength(2));
+    expect(s.calls.last.$2['utcOffsetMinutes'], 600);
+    await vm.setPushToken('tok');
+    expect(s.calls, hasLength(2));
+  });
+
+  test('получение пуша рассылки отмечается; чужой пуш и тестовая отправка — нет', () async {
+    final s = _server();
+    final vm = await _manager(s.client, VmMemoryStorage());
+
+    final res = await vm.recordPushReceived(<String, dynamic>{'vm_campaign_id': 'c-1', 'vm_notification_id': 'n-1'});
+    expect(res, VmSendResult.sent);
+    expect(s.calls.single.$1, '/api/mobile/v2/push-received');
+    expect(s.calls.single.$2, {'campaignId': 'c-1', 'instanceId': vm.instanceId});
+
+    expect(await vm.recordPushReceived({'vm_notification_id': 'n-1'}), isNull);
+    expect(await vm.recordPushReceived({'from': 'другой сервис'}), isNull);
+    expect(s.calls, hasLength(1));
+  });
+
+  test('не дошедшая отметка о получении — retry, отказ сервера — rejected', () async {
+    final vm503 = await _manager(_server(status: 503).client, VmMemoryStorage());
+    expect(await vm503.recordPushReceived({'vm_campaign_id': 'c', 'vm_notification_id': 'n'}), VmSendResult.retry);
+    final vm400 = await _manager(_server(status: 400).client, VmMemoryStorage());
+    expect(await vm400.recordPushReceived({'vm_campaign_id': 'c', 'vm_notification_id': 'n'}), VmSendResult.rejected);
+  });
+
+  test('получение в фоновом isolate: instanceId из хранилища, без init', () async {
+    final s = _server();
+    final storage = VmMemoryStorage();
+    final client = VmV3Client(baseUrl: 'https://api.test', apiKey: 'vm_live_x', httpClient: s.client, maxRetries: 0);
+    final data = {'vm_campaign_id': 'c-1', 'vm_notification_id': 'n-1'};
+
+    // Установка ещё ни разу не запускалась — приписать получение некому.
+    expect(
+      await VersionManager.recordPushReceivedInBackground(
+        data,
+        baseUrl: 'https://api.test',
+        apiKey: 'vm_live_x',
+        storage: storage,
+        client: client,
+      ),
+      isNull,
+    );
+
+    final vm = await _manager(s.client, storage);
+    final launches = vm.launchCount;
+    final res = await VersionManager.recordPushReceivedInBackground(
+      data,
+      baseUrl: 'https://api.test',
+      apiKey: 'vm_live_x',
+      storage: storage,
+      client: client,
+    );
+    expect(res, VmSendResult.sent);
+    expect(s.calls.single.$2, {'campaignId': 'c-1', 'instanceId': vm.instanceId});
+    expect(int.parse((await storage.read('vm.launch'))!), launches, reason: 'фоновая отметка — не запуск');
   });
 
   test('не дошедший токен уходит при следующем вызове', () async {

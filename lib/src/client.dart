@@ -194,7 +194,9 @@ class VmV3Client {
   }
 
   /// Регистрирует токен FCM установки (back#53). Пустой [token] — установка
-  /// отказалась от уведомлений: сервер её забывает.
+  /// отказалась от уведомлений: сервер её забывает. [utcOffsetMinutes] —
+  /// смещение часов устройства от UTC (back#95): по нему сервер считает
+  /// тихие часы рассылки.
   ///
   /// Не бросает, как [sendEvents]: [VmSendResult.retry] — отправить при
   /// следующем вызове.
@@ -204,6 +206,7 @@ class VmV3Client {
     required String token,
     required int buildNumber,
     required String locale,
+    int? utcOffsetMinutes,
     List<Map<String, Object?>> channels = const [],
   }) => _post('/push-token', 'push token', {
     'instanceId': instanceId,
@@ -211,12 +214,17 @@ class VmV3Client {
     'token': token,
     'buildNumber': buildNumber,
     'locale': locale,
+    'utcOffsetMinutes': ?utcOffsetMinutes,
     if (channels.isNotEmpty) 'channels': channels,
   });
 
   /// Отмечает, что человек открыл пуш рассылки [campaignId].
   Future<VmSendResult> recordPushOpened({required String campaignId, required String instanceId}) =>
       _post('/push-opened', 'push open', {'campaignId': campaignId, 'instanceId': instanceId});
+
+  /// Отмечает, что пуш рассылки [campaignId] дошёл до устройства (back#95).
+  Future<VmSendResult> recordPushReceived({required String campaignId, required String instanceId}) =>
+      _post('/push-received', 'push receipt', {'campaignId': campaignId, 'instanceId': instanceId});
 
   Future<VmSendResult> _post(String path, String what, Map<String, Object?> body) async {
     try {
