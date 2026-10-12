@@ -709,6 +709,29 @@ class VersionManager {
       if (c.isValid) c,
   ];
 
+  /// Отмечает переход в магазин (back#97) — для админки, раздел «Настройки»:
+  /// «Перешли в магазин за 7 дней». Экран обязательного обновления
+  /// ([VmBlockedScreen]) и кнопки уведомлений с действием `store` в
+  /// [presentAll] зовут его сами; руками — только если приложение открывает
+  /// магазин своим путём (своя кнопка «Обновить», своё окно).
+  ///
+  /// Зовите прямо перед открытием ссылки и не ждите: открывать магазин из-за
+  /// отметки задерживать нельзя. Повторы на сбоях сети и 5xx — как у
+  /// остальных запросов; отложенного повтора нет — отметка нужна только
+  /// статистике. `null` — отправлять нечего: [init] не звали или платформа
+  /// не `ios`/`android`/`web`.
+  Future<VmSendResult?> recordStoreOpened() async {
+    if (instanceId.isEmpty || !_storePlatforms.contains(platform)) {
+      _log.debug('store open is not reported', data: {'platform': platform});
+      return null;
+    }
+    final res = await client.recordStoreOpened(instanceId: instanceId, platform: platform);
+    _log.info('store opened', data: {'platform': platform, 'result': res.name});
+    return res;
+  }
+
+  static const _storePlatforms = {'ios', 'android', 'web'};
+
   /// Отправляет событие воронки за текущую установку.
   Future<void> recordEvent(String notificationId, String eventType) =>
       client.recordEvent(notificationId: notificationId, instanceId: instanceId, eventType: eventType);
@@ -772,7 +795,12 @@ class VersionManager {
       context,
       payload: n,
       locale: locale,
-      onAction: onAction,
+      onAction: (kind, value) {
+        // Кнопка «в магазин» — переход в стор: отметка уходит в фоне, а
+        // действие выполняется сразу.
+        if (kind == 'store') unawaited(recordStoreOpened());
+        onAction(kind, value);
+      },
       onLocalPush: onLocalPush,
       bannerDuration: bannerDuration,
       onEvent: (id, type) => recordEvent(id, type),

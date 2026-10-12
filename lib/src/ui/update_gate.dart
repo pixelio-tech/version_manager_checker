@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/check_result.dart';
+import '../version_manager.dart';
 
 /// Что делать с приложением по результату проверки версии.
 enum VmGateVerdict {
@@ -38,7 +41,13 @@ class VmBlockedScreen extends StatelessWidget {
   final String platform;
 
   /// Открыть ссылку на стор (url_launcher и подобное — на стороне приложения).
+  /// Перед вызовом экран сам отмечает переход в магазин
+  /// ([VersionManager.recordStoreOpened]) — в фоне, открытие не ждёт сети.
   final void Function(StoreLink link)? onOpenStore;
+
+  /// Отмечать ли переход в магазин (back#97). Выключают, если приложение
+  /// отмечает его само в [onOpenStore] — иначе переход посчитается дважды.
+  final bool reportStoreOpen;
 
   /// Заголовок и подпись можно переопределить: сервер присылает `message`,
   /// но продуктовый текст часто свой.
@@ -50,9 +59,19 @@ class VmBlockedScreen extends StatelessWidget {
     required this.result,
     required this.platform,
     this.onOpenStore,
+    this.reportStoreOpen = true,
     this.title,
     this.description,
   });
+
+  void _openStore(StoreLink link) {
+    // Без init() отмечать некому: пустышка [VersionManager.instance] ругалась
+    // бы в лог на каждое нажатие.
+    if (reportStoreOpen && VersionManager.isInitialized) {
+      unawaited(VersionManager.instance.recordStoreOpened());
+    }
+    onOpenStore!(link);
+  }
 
   StoreLink? get _link {
     final links = result.updateTarget?.storeLinks ?? const <StoreLink>[];
@@ -108,7 +127,7 @@ class VmBlockedScreen extends StatelessWidget {
                   const SizedBox(height: 24),
                   if (link != null)
                     FilledButton(
-                      onPressed: onOpenStore == null ? null : () => onOpenStore!(link),
+                      onPressed: onOpenStore == null ? null : () => _openStore(link),
                       child: Text(link.storeName.isEmpty ? 'Обновить' : 'Обновить в ${link.storeName}'),
                     )
                   else
@@ -142,6 +161,9 @@ class VmUpdateGate extends StatelessWidget {
   final CheckResult? result;
   final String platform;
   final void Function(StoreLink link)? onOpenStore;
+
+  /// См. [VmBlockedScreen.reportStoreOpen].
+  final bool reportStoreOpen;
   final Widget child;
   final String? title;
   final String? description;
@@ -152,6 +174,7 @@ class VmUpdateGate extends StatelessWidget {
     required this.platform,
     required this.child,
     this.onOpenStore,
+    this.reportStoreOpen = true,
     this.title,
     this.description,
   });
@@ -159,7 +182,14 @@ class VmUpdateGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (vmVerdictFor(result) == VmGateVerdict.pass) return child;
-    return VmBlockedScreen(result: result!, platform: platform, onOpenStore: onOpenStore, title: title, description: description);
+    return VmBlockedScreen(
+      result: result!,
+      platform: platform,
+      onOpenStore: onOpenStore,
+      reportStoreOpen: reportStoreOpen,
+      title: title,
+      description: description,
+    );
   }
 }
 

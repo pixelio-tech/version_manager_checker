@@ -226,6 +226,13 @@ class VmV3Client {
   Future<VmSendResult> recordPushReceived({required String campaignId, required String instanceId}) =>
       _post('/push-received', 'push receipt', {'campaignId': campaignId, 'instanceId': instanceId});
 
+  /// Отмечает переход в магазин (back#97): человек нажал «Обновить», и
+  /// приложение вот-вот откроет ссылку стора. По этим отметкам админка
+  /// показывает переходы за неделю по платформам. [platform] — `ios`,
+  /// `android` или `web`.
+  Future<VmSendResult> recordStoreOpened({required String instanceId, required String platform}) =>
+      _post('/store-opened', 'store open', {'instanceId': instanceId, 'platform': platform});
+
   Future<VmSendResult> _post(String path, String what, Map<String, Object?> body) async {
     try {
       final res = await _send(() => _http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
