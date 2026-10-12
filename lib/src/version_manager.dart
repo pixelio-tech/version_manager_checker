@@ -536,9 +536,12 @@ class VersionManager {
   /// которые доходят и до закрытого приложения. `null` или пустая строка —
   /// человек запретил уведомления или вышел: сервер забудет установку.
   ///
-  /// Токен, сборка и язык запоминаются: пока они те же, повторный вызов
-  /// (на каждом старте, при `onTokenRefresh`) в сеть не ходит. Не дошло —
-  /// уйдёт при следующем вызове. Firebase пакет не тянет: токен получает
+  /// Токен, сборка, язык и смещение часов устройства от UTC запоминаются:
+  /// пока они те же, повторный вызов (на каждом старте, при `onTokenRefresh`)
+  /// в сеть не ходит. Сменился часовой пояс (перелёт, переход на летнее
+  /// время) — токен уходит заново: по смещению сервер считает тихие часы
+  /// рассылки (back#95). Не дошло — уйдёт при следующем вызове. Firebase
+  /// пакет не тянет: токен получает
   /// приложение в своём обработчике пушей (пример — в README).
   ///
   /// [channels] — каналы уведомлений Android (back#84), первый или
@@ -561,7 +564,8 @@ class VersionManager {
     _pushChannels = valid;
     _defaultPushChannel = def;
     final wire = [for (final c in valid) c.toJson(isDefault: c.id == def)];
-    final signature = '$t|$buildNumber|$locale|${jsonEncode(wire)}';
+    final offset = utcOffsetMinutes();
+    final signature = '$t|$buildNumber|$locale|$offset|${jsonEncode(wire)}';
     String? sent;
     try {
       sent = await storage.read(_kPushToken);
@@ -573,6 +577,7 @@ class VersionManager {
       token: t,
       buildNumber: buildNumber,
       locale: locale,
+      utcOffsetMinutes: offset,
       channels: t.isEmpty ? const [] : wire,
     );
     if (res == VmSendResult.retry) return res;
@@ -601,6 +606,55 @@ class VersionManager {
     _log.info('push opened', data: {'campaign': open.campaignId, 'action': open.action['kind']});
     return open;
   }
+
+  /// Отмечает, что пуш рассылки дошёл до устройства (back#95): звать из
+  /// своего обработчика FCM — `FirebaseMessaging.onMessage` и фонового
+  /// `onBackgroundMessage`. Без этого в итогах рассылки «доставлено» значит
+  /// только «принято Firebase». Пуш не от Version Manager и тестовая
+  /// отправка из админки (без рассылки) — `null`, в сеть не ходит.
+  ///
+  /// Ждите результата: в фоновом обработчике приложение могут остановить
+  /// сразу после него. Повторы на сбоях сети и 5xx — как у остальных
+  /// запросов; [VmSendResult.retry] — отметка так и не дошла. Отложенного
+  /// повтора нет: отметка нужна только статистике рассылки.
+  Future<VmSendResult?> recordPushReceived(Map<String, Object?> data) async {
+    final push = VmPushOpen.fromData(data);
+    final campaignId = push?.campaignId;
+    if (campaignId == null) return null;
+    final res = await client.recordPushReceived(campaignId: campaignId, instanceId: instanceId);
+    _log.info('push received', data: {'campaign': campaignId, 'result': res.name});
+    return res;
+  }
+
+  /// [recordPushReceived] для фонового обработчика, где [init] не звали:
+  /// `onBackgroundMessage` на Android работает в отдельном isolate, а [init]
+  /// там посчитал бы лишний запуск приложения. Нужны ключ и то же хранилище,
+  /// что у [init], — из него берётся `instanceId`. Установка, ещё ни разу не
+  /// запускавшая [init], — `null`.
+  static Future<VmSendResult?> recordPushReceivedInBackground(
+    Map<String, Object?> data, {
+    required String baseUrl,
+    required String apiKey,
+    required VmStorage storage,
+    VmV3Client? client,
+    VmLogSink? onLog,
+  }) async {
+    final campaignId = VmPushOpen.fromData(data)?.campaignId;
+    if (campaignId == null) return null;
+    String? instanceId;
+    try {
+      instanceId = await storage.read(_kInstanceId);
+    } catch (e) {
+      VmLog(onLog).warning('push receipt skipped: storage is unavailable', error: e);
+    }
+    if (instanceId == null || instanceId.isEmpty) return null;
+    final c = client ?? VmV3Client(baseUrl: baseUrl, apiKey: apiKey, onLog: onLog);
+    return c.recordPushReceived(campaignId: campaignId, instanceId: instanceId);
+  }
+
+  /// Смещение часов устройства от UTC в минутах; подменяется в тестах.
+  @visibleForTesting
+  static int Function() utcOffsetMinutes = () => DateTime.now().timeZoneOffset.inMinutes;
 
   /// Пуш от Version Manager? Чужие пуши (приложение шлёт их сам в тот же
   /// Firebase-проект) SDK не трогает — их обрабатывает приложение.

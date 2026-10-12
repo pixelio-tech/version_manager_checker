@@ -1,3 +1,16 @@
+## 0.13.0
+
+- **Доставка рассылок по устройствам** (version_manager_back#95).
+  `vm.recordPushReceived(data)` отмечает, что пуш рассылки дошёл до
+  устройства (`POST /push-received`); для фонового обработчика без `init` —
+  `VersionManager.recordPushReceivedInBackground(data, baseUrl:, apiKey:,
+  storage:)`. Без отметок «доставлено» в итогах рассылки значит только
+  «принято Firebase». Пример — в README, «Получение».
+- `setPushToken` передаёт смещение часов устройства от UTC
+  (`utcOffsetMinutes`): тихие часы рассылки считаются по времени устройства.
+  Сменился часовой пояс — токен уходит заново. `VmV3Client.registerPushToken`
+  принимает `utcOffsetMinutes`, новый `VmV3Client.recordPushReceived`.
+
 ## 0.12.0
 
 - **Пакет `version_manager_v3_push` удалён** (version_manager_checker#23).

@@ -301,6 +301,8 @@ Firebase держит один фоновый обработчик, у `flutter_
 | `vm.pushChannelFor(channelId)` | в каком канале Android показать рассылку при открытом приложении |
 | `vm.planPushChannels()` | какие каналы Android создать и удалить (из кода и из админки) |
 | `vm.pushOpened(message.data)` | тап по пушу: отмечает открытие и отдаёт действие сообщения; чужой пуш — `null` |
+| `vm.recordPushReceived(message.data)` | пуш пришёл при открытом приложении: отмечает получение |
+| `VersionManager.recordPushReceivedInBackground(message.data, …)` | то же в фоновом обработчике, где `init` не звали |
 
 ### Настройка Firebase
 
@@ -334,7 +336,15 @@ final local = FlutterLocalNotificationsPlugin();
 @pragma('vm:entry-point')
 Future<void> onBackground(RemoteMessage message) async {
   // Рассылку Version Manager показывает система: она приходит с заголовком
-  // и текстом. Здесь — только ваши фоновые пуши.
+  // и текстом. Здесь — отметка о получении (см. «Получение») и ваши фоновые пуши.
+  if (VersionManager.isVmPush(message.data)) {
+    await VersionManager.recordPushReceivedInBackground(
+      message.data,
+      baseUrl: vmBaseUrl, // ключ и адрес — те же, что в init
+      apiKey: vmApiKey,
+      storage: PrefsStorage(), // то же хранилище, что в init: из него берётся instanceId
+    );
+  }
 }
 
 Future<void> startPush(VersionManager vm) async {
@@ -389,7 +399,9 @@ Future<void> startPush(VersionManager vm) async {
   // Пока приложение открыто, Android сам рассылку не покажет.
   FirebaseMessaging.onMessage.listen((m) {
     final n = m.notification;
-    if (!VersionManager.isVmPush(m.data) || n == null || !Platform.isAndroid) return /* свой пуш */;
+    if (!VersionManager.isVmPush(m.data)) return /* свой пуш */;
+    vm.recordPushReceived(m.data);
+    if (n == null || !Platform.isAndroid) return;
     final c = vm.pushChannelFor(n.android?.channelId);
     if (c == null) return;
     local.show(
@@ -414,6 +426,31 @@ Importance importanceOf(VmPushImportance i) => switch (i) {
   VmPushImportance.high => Importance.high,
 };
 ```
+
+### Получение
+
+В итогах рассылки «Доставлено» — это устройства, которые сообщили, что
+пуш до них дошёл. Без отметок из приложения там остаётся только «принято
+Firebase»: FCM отвечает серверу, что взял сообщение, но не что оно
+показалось. Отметку ставят два вызова из примера выше:
+
+- **При открытом приложении** — `vm.recordPushReceived(m.data)` в
+  `FirebaseMessaging.onMessage`.
+- **В фоне** — `VersionManager.recordPushReceivedInBackground(...)` в
+  `onBackgroundMessage`. На Android фоновый обработчик работает в отдельном
+  isolate, где `VersionManager.init` не звали; звать там `init` не нужно —
+  он посчитал бы лишний запуск приложения. Хватит ключа и того же
+  хранилища, что у `init`: из него берётся `instanceId`.
+
+Оба вызова ждут ответа (в фоне приложение могут остановить сразу после
+обработчика), повторяют на сбоях сети, как остальные запросы SDK, и
+пропускают чужие пуши. Открытие (`pushOpened`) тоже считается получением.
+
+На iOS фоновый обработчик вызывается только для пушей с
+`content-available`, поэтому получение рассылки, пришедшей в свёрнутое
+приложение, видно по открытию. Тихие часы рассылки считаются по часам
+устройства: смещение от UTC SDK передаёт вместе с токеном и отправляет
+токен заново, когда часовой пояс меняется.
 
 ### Каналы Android
 
