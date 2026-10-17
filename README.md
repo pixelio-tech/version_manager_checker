@@ -14,17 +14,38 @@
 
 ## Быстрый старт
 
-```dart
-await VersionManager.init(
-  baseUrl: 'https://api.example.com',
-  apiKey: 'vm_live_…',          // ключ приложения из админки
-  namespace: 'com.example.app',  // bundle id
-  version: '1.2.0',
-  buildNumber: 42,
-  platform: 'ios',               // ios | android | web
-  storage: PrefsStorage(),       // см. «Хранилище»
-);
+Версию и bundle id берём из `package_info_plus` (`flutter pub add
+package_info_plus`). Хранилище подключать не нужно: по умолчанию пакет держит
+`instanceId`, ETag и кэш конфига в `shared_preferences` (`VmPrefsStorage`).
 
+```dart
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:version_manager_v3_checker/version_manager_v3_checker.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final packageInfo = await PackageInfo.fromPlatform();
+
+  await VersionManager.init(
+    baseUrl: 'https://api.example.com',
+    apiKey: 'vm_live_…',                          // ключ приложения из админки
+    namespace: packageInfo.packageName,           // bundle id
+    version: packageInfo.version,                 // 1.2.0
+    buildNumber: int.tryParse(packageInfo.buildNumber) ?? 0,
+    platform: Platform.isIOS ? 'ios' : 'android',
+    // storage: VmPrefsStorage() — по умолчанию; своё хранилище — см. «Хранилище»
+  );
+
+  runApp(const MyApp());
+}
+```
+
+Дальше, где удобно (например, на первом экране):
+
+```dart
 final outcome = await VersionManager.instance.check();
 final result = outcome.result;   // null — спросить не удалось и кэша нет
 ```
@@ -371,7 +392,7 @@ Future<void> onBackground(RemoteMessage message) async {
       message.data,
       baseUrl: vmBaseUrl, // ключ и адрес — те же, что в init
       apiKey: vmApiKey,
-      storage: PrefsStorage(), // то же хранилище, что в init: из него берётся instanceId
+      // storage — то же, что в init (по умолчанию VmPrefsStorage): из него берётся instanceId
     );
   }
 }
@@ -508,31 +529,16 @@ Firebase»: FCM отвечает серверу, что взял сообщен�
 
 ## Хранилище
 
-**Без него статистика приложения врёт.** `instanceId` — то, по чему сервер
-считает установки; если он новый на каждый запуск, каждый старт выглядит как
-новая установка, а частотные ограничения показов считаются заново, и человек
-видит одно и то же сообщение снова. Пакет ругается в лог при `init()` без
-хранилища, но починить это за вас не может.
+Пакету нужно помнить `instanceId` (по нему сервер считает установки и частоту
+показов), ETag и последний конфиг. По умолчанию всё это лежит в
+`shared_preferences` — класс `VmPrefsStorage`, ничего подключать не нужно.
+Если раньше вы копировали `PrefsStorage` из README, его можно удалить:
+`VmPrefsStorage` читает те же ключи, `instanceId` сохранится.
 
-
-Пакету нужно помнить `instanceId` (по нему сервер считает частоту показов) и
-ETag последнего конфига. Зависимость на `shared_preferences` не навязывается —
-передайте свою реализацию:
-
-```dart
-class PrefsStorage implements VmStorage {
-  @override
-  Future<String?> read(String key) async =>
-      (await SharedPreferences.getInstance()).getString(key);
-
-  @override
-  Future<void> write(String key, String value) async =>
-      (await SharedPreferences.getInstance()).setString(key, value);
-}
-```
-
-Без неё используется память процесса: после перезапуска `instanceId` будет
-новым и лимиты показов начнут считаться заново.
+Своё хранилище (зашифрованное, Hive, общий слой приложения) — реализуйте
+`VmStorage` (`read`/`write` строк по ключу) и передайте в `init(storage: …)`.
+`VmMemoryStorage` держит всё в памяти процесса — только для тестов: после
+перезапуска каждый старт выглядит как новая установка.
 
 ## Что рисует пакет
 

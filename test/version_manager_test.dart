@@ -24,7 +24,7 @@ Future<VersionManager> _manager(MockClient mock, {VmStorage? storage}) => Versio
   version: '1.0.0',
   buildNumber: 1,
   platform: 'ios',
-  storage: storage,
+  storage: storage ?? VmMemoryStorage(),
   client: VmV3Client(baseUrl: 'https://api.test', apiKey: 'vm_live_x', httpClient: mock),
 );
 
@@ -246,6 +246,7 @@ void main() {
       buildNumber: 1,
       platform: 'ios',
       budget: const Duration(milliseconds: 200),
+      storage: VmMemoryStorage(),
       client: VmV3Client(baseUrl: 'https://api.test', apiKey: 'vm_live_x', httpClient: mock),
     );
 

@@ -24,7 +24,7 @@ Future<VersionManager> _manager(MockClient mock, {VmStorage? storage}) => Versio
   version: '1.0.0',
   buildNumber: 41,
   platform: 'ios',
-  storage: storage,
+  storage: storage ?? VmMemoryStorage(),
   client: VmV3Client(baseUrl: 'https://api.test', apiKey: 'vm_live_x', httpClient: mock, maxRetries: 0),
 );
 

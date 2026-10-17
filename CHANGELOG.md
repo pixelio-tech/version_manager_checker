@@ -1,3 +1,15 @@
+## 0.15.0
+
+- **Хранилище из коробки** (version_manager_checker#27). Новый `VmPrefsStorage`
+  поверх `shared_preferences` — хранилище по умолчанию в `VersionManager.init`
+  и `recordPushReceivedInBackground` (там `storage` стал необязательным).
+  Копировать `PrefsStorage` из README больше не нужно; он читает те же ключи,
+  так что `instanceId` при переходе сохраняется. `VmStorage` остаётся для
+  своего хранилища, `VmMemoryStorage` — для тестов.
+- Сбой хранилища при `init` больше не бросает: раньше запасной `instanceId`
+  тоже пытался записаться и ронял `init`.
+- README: быстрый старт — полный `main` с `package_info_plus`.
+
 ## 0.14.0
 
 - **Переходы в магазин** (version_manager_back#97, version_manager_checker#25).

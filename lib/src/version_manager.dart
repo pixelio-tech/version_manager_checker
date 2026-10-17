@@ -32,9 +32,9 @@ import 'ui/notification_presenter.dart';
 /// сервер, отозванный ключ и таймаут возвращают [VmUnavailable] и уходят в
 /// [failures]. Проверка версии не должна ронять чужой запуск.
 ///
-/// Хранилище по умолчанию живёт в памяти: `instanceId` тогда новый на каждый
-/// запуск, и частотные ограничения показов считаются заново. Для продакшена
-/// передайте [storage] поверх `shared_preferences` — см. README.
+/// Хранилище по умолчанию — [VmPrefsStorage] поверх `shared_preferences`:
+/// `instanceId`, ETag и кэш конфига переживают перезапуск. Своё хранилище
+/// передайте в [storage].
 class VersionManager {
   static VersionManager? _instance;
 
@@ -157,17 +157,7 @@ class VersionManager {
     Duration cacheTtl = const Duration(days: 7),
     VmLogSink? onLog,
   }) async {
-    final store = storage ?? VmMemoryStorage();
-    if (storage == null) {
-      // Без постоянного хранилища instanceId новый на каждый запуск. Это не
-      // мелочь: сервер считает установки по нему, и статистика приложения
-      // превращается в поток «новых установок», а частотные ограничения
-      // показов считаются заново — человек видит одно и то же сообщение.
-      VmLog(onLog).error(
-        'storage not provided: every launch looks like a new install — '
-        'statistics and impression caps will be wrong; pass VmStorage backed by shared_preferences',
-      );
-    }
+    final store = storage ?? const VmPrefsStorage();
     final it = VersionManager._(
       client:
           client ??
@@ -195,7 +185,8 @@ class VersionManager {
       await it._countLaunch();
     } catch (e, st) {
       it._log.error('storage is unavailable, continuing without it', error: e, stackTrace: st);
-      it._instanceId ??= await it._newInstanceId();
+      // Записать новый id тоже не выйдет — берём его только на этот запуск.
+      it._instanceId ??= _generateInstanceId();
     }
     it._events = VmEventQueue(client: it.client, storage: store, instanceId: () => it.instanceId, log: it._log);
     await it._events.restore();
@@ -347,10 +338,14 @@ class VersionManager {
   }
 
   Future<String> _newInstanceId() async {
-    final rnd = Random.secure();
-    final id = List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+    final id = _generateInstanceId();
     await storage.write(_kInstanceId, id);
     return id;
+  }
+
+  static String _generateInstanceId() {
+    final rnd = Random.secure();
+    return List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
   }
 
   /// Спрашивает сервер о версии.
@@ -629,13 +624,14 @@ class VersionManager {
   /// [recordPushReceived] для фонового обработчика, где [init] не звали:
   /// `onBackgroundMessage` на Android работает в отдельном isolate, а [init]
   /// там посчитал бы лишний запуск приложения. Нужны ключ и то же хранилище,
-  /// что у [init], — из него берётся `instanceId`. Установка, ещё ни разу не
-  /// запускавшая [init], — `null`.
+  /// что у [init], — из него берётся `instanceId` (по умолчанию, как и в
+  /// [init], — [VmPrefsStorage]). Установка, ещё ни разу не запускавшая
+  /// [init], — `null`.
   static Future<VmSendResult?> recordPushReceivedInBackground(
     Map<String, Object?> data, {
     required String baseUrl,
     required String apiKey,
-    required VmStorage storage,
+    VmStorage storage = const VmPrefsStorage(),
     VmV3Client? client,
     VmLogSink? onLog,
   }) async {
